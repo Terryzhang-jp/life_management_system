@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2 } from "lucide-react"
+import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare } from "lucide-react"
 import { DatePicker, DateDisplay } from "@/components/ui/date-picker"
 import { TaskCompletionDialog } from "./task-completion-dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -616,12 +616,6 @@ export default function TasksPage() {
   // 处理任务完成
   const handleTaskCompleted = async () => {
     await loadTasks() // 重新加载任务以更新完成状态
-    if (expandedTask?.id) {
-      await loadSubTasks(expandedTask.id, 1)
-    }
-    if (selectedSubTask?.id) {
-      await loadSubTasks(selectedSubTask.id, 2)
-    }
   }
 
   // 取消完成任务
@@ -634,12 +628,6 @@ export default function TasksPage() {
 
       if (response.ok) {
         await loadTasks()
-        if (expandedTask?.id) {
-          await loadSubTasks(expandedTask.id, 1)
-        }
-        if (selectedSubTask?.id) {
-          await loadSubTasks(selectedSubTask.id, 2)
-        }
         toast({
           title: "已取消完成",
           description: "任务已重新激活"
@@ -888,6 +876,7 @@ export default function TasksPage() {
             </Button>
           </div>
         </div>
+      </div>
       )
     }
 
@@ -939,14 +928,16 @@ export default function TasksPage() {
                   </span>
                 )}
                 {task.isUnclear && (
-                  <span title={task.unclearReason || "此任务标记为模糊"}>
-                    <HelpCircle className="h-4 w-4 text-orange-500" />
-                  </span>
+                  <HelpCircle
+                    className="h-4 w-4 text-orange-500"
+                    title={task.unclearReason || "此任务标记为模糊"}
+                  />
                 )}
                 {task.hasUnclearChildren && (
-                  <span title="此任务有模糊的子任务">
-                    <HelpCircle className="h-4 w-4 text-yellow-500" />
-                  </span>
+                  <HelpCircle
+                    className="h-4 w-4 text-yellow-500"
+                    title="此任务有模糊的子任务"
+                  />
                 )}
               </div>
               {task.description && (
@@ -963,9 +954,10 @@ export default function TasksPage() {
                     minute: '2-digit'
                   })} 完成</span>
                   {task.completion.completionComment && (
-                    <span title={`完成感悟: ${task.completion.completionComment}`}>
-                      <MessageSquare className="h-3 w-3 text-gray-400" />
-                    </span>
+                    <MessageSquare
+                      className="h-3 w-3 text-gray-400"
+                      title={`完成感悟: ${task.completion.completionComment}`}
+                    />
                   )}
                 </div>
               )}
@@ -1200,12 +1192,6 @@ export default function TasksPage() {
                 返回主页
               </Button>
             </Link>
-            <Link href="/past/completed">
-              <Button variant="outline" size="sm">
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                查看完成时间线
-              </Button>
-            </Link>
           </div>
           <h1 className="text-3xl font-bold mb-2">任务管理</h1>
           <p className="text-gray-600">整理和追踪所有需要做的事情</p>
@@ -1327,76 +1313,31 @@ export default function TasksPage() {
                         )
                       }
 
-                      const isCompleted = subTask.completion?.isCompleted || false
-                      const titleClass = isCompleted
-                        ? 'font-medium text-gray-500 line-through'
-                        : 'font-medium text-gray-900'
-
                       return (
                         <div
                           key={subTask.id}
                           className={`p-3 border rounded cursor-pointer transition-colors ${
                             selectedSubTask?.id === subTask.id
                               ? 'bg-gray-100 border-gray-400'
-                              : isCompleted
-                                ? 'bg-gray-100 border-gray-300'
-                                : 'hover:bg-gray-50'
+                              : 'hover:bg-gray-50'
                           }`}
                           onClick={() => selectSubTask(subTask)}
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!subTask.id) return
-                                  if (isCompleted) {
-                                    uncompleteTask(subTask.id)
-                                  } else {
-                                    showTaskCompletionDialog(subTask)
-                                  }
-                                }}
-                                disabled={loading}
-                                className="h-6 w-6 p-0 mt-0.5"
-                                title={isCompleted ? '取消完成' : '标记为完成'}
-                              >
-                                {isCompleted ? (
-                                  <CheckSquare className="h-3 w-3 text-green-600" />
-                                ) : (
-                                  <Square className="h-3 w-3 text-gray-400" />
-                                )}
-                              </Button>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className={titleClass}>{subTask.title}</span>
-                                  {subTask.isUnclear && (
-                                    <span title={subTask.unclearReason || "此任务标记为模糊"}>
-                                      <HelpCircle className="h-4 w-4 text-orange-500" />
-                                    </span>
-                                  )}
-                                  {subTask.hasUnclearChildren && (
-                                    <span title="此任务有模糊的子任务">
-                                      <HelpCircle className="h-4 w-4 text-yellow-500" />
-                                    </span>
-                                  )}
-                                  {isCompleted && subTask.completion?.completionComment && (
-                                    <span title={`完成感悟: ${subTask.completion.completionComment}`}>
-                                      <MessageSquare className="h-3 w-3 text-gray-400" />
-                                    </span>
-                                  )}
-                                </div>
-                                {subTask.description && (
-                                  <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                                    {subTask.description}
-                                  </p>
-                                )}
-                                <DateDisplay
-                                  date={subTask.deadline}
-                                  className={`mt-1 ${isCompleted ? 'text-gray-400' : ''}`}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{subTask.title}</span>
+                              {subTask.isUnclear && (
+                                <HelpCircle
+                                  className="h-4 w-4 text-orange-500"
+                                  title={subTask.unclearReason || "此任务标记为模糊"}
                                 />
-                              </div>
+                              )}
+                              {subTask.hasUnclearChildren && (
+                                <HelpCircle
+                                  className="h-4 w-4 text-yellow-500"
+                                  title="此任务有模糊的子任务"
+                                />
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <Button
@@ -1436,6 +1377,10 @@ export default function TasksPage() {
                               <ChevronRight className="h-4 w-4" />
                             </div>
                           </div>
+                          {subTask.description && (
+                            <p className="text-xs text-gray-600 mt-1">{subTask.description}</p>
+                          )}
+                          <DateDisplay date={subTask.deadline} className="mt-1" />
                         </div>
                       )
                     })}
@@ -1521,66 +1466,19 @@ export default function TasksPage() {
                             )
                           }
 
-                          const isCompleted = subSubTask.completion?.isCompleted || false
-
                           return (
                             <div
                               key={subSubTask.id}
-                              className={`p-3 border rounded transition-colors ${
-                                isCompleted ? 'bg-gray-100 border-gray-300' : 'hover:bg-gray-50'
-                              }`}
+                              className="p-3 border rounded hover:bg-gray-50 transition-colors"
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-start gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      if (!subSubTask.id) return
-                                      if (isCompleted) {
-                                        uncompleteTask(subSubTask.id)
-                                      } else {
-                                        showTaskCompletionDialog(subSubTask)
-                                      }
-                                    }}
-                                    disabled={loading}
-                                    className="h-6 w-6 p-0 mt-0.5"
-                                    title={isCompleted ? '取消完成' : '标记为完成'}
-                                  >
-                                    {isCompleted ? (
-                                      <CheckSquare className="h-3 w-3 text-green-600" />
-                                    ) : (
-                                      <Square className="h-3 w-3 text-gray-400" />
-                                    )}
-                                  </Button>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={isCompleted ? 'font-medium text-gray-500 line-through' : 'font-medium'}>
-                                        {subSubTask.title}
-                                      </span>
-                                      {subSubTask.isUnclear && (
-                                        <div className="text-orange-500" title={subSubTask.unclearReason || '该任务标记为模糊'}>
-                                          <HelpCircle className="h-3 w-3" />
-                                        </div>
-                                      )}
-                                      {isCompleted && subSubTask.completion?.completionComment && (
-                                        <span title={`完成感悟: ${subSubTask.completion.completionComment}`}>
-                                          <MessageSquare className="h-3 w-3 text-gray-400" />
-                                        </span>
-                                      )}
-                                    </div>
-                                    {subSubTask.description && (
-                                      <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                                        {subSubTask.description}
-                                      </p>
-                                    )}
-                                    <DateDisplay
-                                      date={subSubTask.deadline}
-                                      className={`mt-1 ${isCompleted ? 'text-gray-400' : ''}`}
-                                    />
-                                  </div>
-                                </div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{subSubTask.title}</span>
                                 <div className="flex items-center gap-1">
+                                  {subSubTask.isUnclear && (
+                                    <div className="text-orange-500" title={subSubTask.unclearReason || '该任务标记为模糊'}>
+                                      <HelpCircle className="h-3 w-3" />
+                                    </div>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -1608,6 +1506,10 @@ export default function TasksPage() {
                                   </Button>
                                 </div>
                               </div>
+                              {subSubTask.description && (
+                                <p className="text-xs text-gray-600 mt-1">{subSubTask.description}</p>
+                              )}
+                              <DateDisplay date={subSubTask.deadline} className="mt-1" />
                             </div>
                           )
                         })

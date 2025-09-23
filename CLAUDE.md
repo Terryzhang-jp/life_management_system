@@ -1,7 +1,7 @@
 # Life Philosophy Frontend
 
 ## 项目概述
-这是一个基于"过去-现在-未来"时态哲学的个人生活管理应用，使用 Next.js 14 + TypeScript + Tailwind CSS 构建。通过三个时态页面构建完整的生命管理体系：回顾过去的经验与成就、专注现在的行动与时间、规划未来的目标与愿景。集成了任务管理、思考记录、时间追踪等核心功能。
+这是一个基于"过去-现在-未来"时态哲学的个人生活管理应用，使用 Next.js 14 + TypeScript + Tailwind CSS 构建。通过三个时态页面构建完整的生命管理体系：回顾过去的经验与成就、专注现在的行动与时间、规划未来的目标与愿景。系统已涵盖任务管理、思考记录、时间追踪，以及最新的完成时间线与开销票据管理等核心功能。
 
 ## 技术栈
 - **框架**: Next.js 14.1.4 (App Router)
@@ -22,15 +22,27 @@ frontend/
 │   │   ├── habits/       # 习惯追踪 API
 │   │   ├── decisions/    # 每日决策 API
 │   │   ├── memories/     # 记忆管理 API
+│   │   ├── completed-tasks/ # 任务完成记录 API
+│   │   ├── expenses/     # 开销记录 API（支持票据上传）
+│   │   ├── expense-categories/ # 开销属性管理 API
+│   │   ├── schedule/     # 日程安排 API
+│   │   │   ├── week/route.ts      # 周日程查询
+│   │   │   ├── day/route.ts       # 日日程查询
+│   │   │   ├── blocks/route.ts    # 日程块CRUD
+│   │   │   └── conflicts/route.ts # 时间冲突检测
 │   │   ├── export/       # 数据导出 API
 │   │   └── import/       # 数据导入 API
 │   ├── past/             # 过去页面（回顾与复盘）
+│   │   ├── completed/page.tsx  # 已完成任务时间线
+│   │   ├── expenses/page.tsx   # 开销记录与票据管理
 │   │   └── page.tsx
 │   ├── future/           # 未来页面（愿景与规划）
 │   │   └── page.tsx
 │   ├── philosophy/       # 人生哲学页面
 │   │   └── page.tsx
 │   ├── tasks/            # 任务管理页面
+│   │   └── page.tsx
+│   ├── schedule/         # 日程安排页面
 │   │   └── page.tsx
 │   ├── thoughts/         # 思考记录页面
 │   │   └── page.tsx
@@ -51,6 +63,7 @@ frontend/
 │   │   └── progress.tsx
 │   ├── life-philosophy-app.tsx  # 人生哲学管理组件
 │   ├── tasks-page.tsx           # 任务管理组件
+│   ├── expenses-page.tsx        # 开销记录与票据组件
 │   ├── present-page.tsx         # 现在页面组件（主页）
 │   ├── analog-clock.tsx         # 模拟时钟和时间进度组件
 │   ├── habit-tracker.tsx        # 习惯追踪主组件
@@ -61,6 +74,11 @@ frontend/
 │   ├── memories-gallery.tsx     # 记忆相册主组件（小红书风格瀑布流）
 │   ├── memory-form.tsx          # 记忆添加/编辑表单
 │   ├── memory-detail-view.tsx   # 记忆详情查看组件
+│   ├── schedule/                # 日程安排组件目录
+│   │   ├── task-pool.tsx        # 可拖拽任务池组件
+│   │   ├── timeline-week-view.tsx # Google Calendar风格24小时时间轴
+│   │   ├── time-setting-modal.tsx # 时间设置/编辑模态框
+│   │   └── day-view.tsx         # 日视图详情组件
 │   └── global-thought-bubble.tsx # 全局思考记录悬浮按钮
 ├── lib/                   # 工具库和业务逻辑
 │   ├── utils.ts          # 通用工具函数
@@ -71,6 +89,8 @@ frontend/
 │   ├── habits-db.ts     # 习惯追踪数据库操作
 │   ├── decisions-db.ts  # 每日决策数据库操作
 │   ├── memories-db.ts   # 记忆管理数据库操作
+│   ├── expenses-db.ts   # 开销与票据数据库操作
+│   ├── schedule-db.ts   # 日程安排数据库操作
 │   └── api.ts           # API 请求管理
 ├── hooks/                # 自定义 React Hooks
 │   └── use-toast.ts     # Toast 通知 hook
@@ -80,9 +100,11 @@ frontend/
 │   ├── thoughts.db      # 思考记录数据库
 │   ├── habits.db        # 习惯追踪数据库
 │   ├── decisions.db     # 每日决策数据库
-│   └── memories.db      # 记忆管理数据库
+│   ├── memories.db      # 记忆管理数据库
+│   └── schedule.db      # 日程安排数据库
 ├── public/               # 静态资源
-│   └── my-past/         # 记忆照片存储目录
+│   ├── my-past/         # 记忆照片存储目录
+│   └── receipts/        # 开销票据图片存放目录
 └── uploads/              # 上传文件目录
 ```
 
@@ -97,6 +119,7 @@ frontend/
 ├── /future → 未来页面，目标规划，愿景管理
 ├── /philosophy → 人生哲学，价值观与核心理念
 ├── /tasks → 任务管理，三层级项目追踪
+├── /schedule → 日程安排，精确时间管理与任务调度
 └── /thoughts → 思考记录，灵感与感悟收集
 ```
 
@@ -222,8 +245,25 @@ interface TasksData {
 - ✅ **截止日期管理**: 子任务和子子任务支持deadline设置、编辑和显示
 - ✅ **中文支持**: 完整支持中文输入法
 - ✅ **数据持久化**: SQLite 本地数据库存储
+- ✅ **完成时间线集成**: 主/子/子子任务完成状态同步到 `/past/completed`
+- ✅ **完成感悟记录**: 完成任务时可填写感悟并在时间线上查看
 
-### 5. 全局思考记录系统
+### 5. 过去页面扩展：时间线与开销票据
+
+#### `/past/completed` 完成时间线
+- 展示所有完成任务，包含类型、层级、完成时间、完成感悟
+- 任务完成后自动刷新，子任务/子子任务也可直接切换完成状态
+- 支持区分主任务、子任务、子子任务的层级标签
+
+#### `/past/expenses` 开销记录
+- 使用 `expenses-db` 管理金额、货币、属性、备注与票据路径
+- 属性（分类）自定义名称、颜色，可增删改
+- 票据上传保存在 `public/receipts`，列表中以缩略图展示并可点开查看大图
+- 支持多货币记录，自动汇总同币种金额，多币种时给出提示
+- 删除开销时同步清理票据文件
+- 当前只允许通过前端选择图片；PDF 支持在评估中
+
+### 6. 全局思考记录系统
 
 #### 数据结构
 ```typescript
@@ -243,16 +283,73 @@ interface Thought {
 - **编辑删除**: 支持对已记录的思考进行编辑或删除
 - **轻量设计**: 简约的界面不干扰主要工作流程
 
+### 6. 日程安排系统
+
+#### 数据结构
+```typescript
+interface ScheduleBlock {
+  id?: number
+  taskId: number           // 关联的任务ID
+  date: string            // 日期 (YYYY-MM-DD)
+  startTime: string       // 开始时间 (HH:MM)
+  endTime: string         // 结束时间 (HH:MM)
+  comment?: string        // 备注信息
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  taskTitle: string       // 任务标题（冗余字段，用于性能）
+  parentTitle?: string    // 父任务标题
+  grandparentTitle?: string // 祖父任务标题
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface WeekSchedule {
+  [date: string]: ScheduleBlock[]
+}
+```
+
+#### 核心功能
+- ✅ **Google Calendar风格界面**: 24小时时间轴 + 7天周视图
+- ✅ **拖拽任务调度**: 从任务池拖拽子子任务到具体时间槽
+- ✅ **智能任务池**: 只显示可调度的任务（子子任务和无子任务的子任务）
+- ✅ **时间冲突检测**: 创建和编辑时自动检测时间冲突
+- ✅ **任务时间编辑**: 完整的时间、日期、备注编辑功能
+- ✅ **睡眠时间标记**: 23:00-07:00 灰色背景标识睡眠时间
+- ✅ **状态管理**: 支持 scheduled/in_progress/completed/cancelled 状态
+- ✅ **任务池自适应**: 根据展开内容智能调整高度
+
+#### 界面设计
+- **左侧任务池**: 可展开的任务树，支持拖拽操作
+- **右侧时间轴**: Google Calendar风格的24小时 × 7天网格
+- **任务块显示**: 根据时长自动调整高度，状态颜色编码
+- **睡眠时间**: 灰色背景 + 💤 图标标识
+- **拖拽反馈**: 实时显示拖拽状态和时间预览
+
+#### 时间管理特性
+- **24小时视图**: 完整显示全天时间安排
+- **精确时间槽**: 每小时60px，支持分钟级精度
+- **智能预填**: 拖拽到特定时间槽时自动预填时间
+- **冲突处理**: 编辑时排除自身，避免误报冲突
+- **快捷时长**: 30分钟、1小时、2小时、半天等快速选项
+
+#### 交互流程
+1. **创建日程**: 拖拽任务到时间槽 → 设置时间和备注 → 确认创建
+2. **编辑日程**: 点击任务块编辑按钮 → 修改信息 → 确认更新
+3. **状态管理**: 点击任务块 → 查看详情 → 更新状态
+4. **任务池管理**: 展开/收起任务组 → 拖拽子任务
+
 ### 主要功能
 1. **三时态页面系统**: 过去-现在-未来的完整生命管理体系
 2. **时间管理中心**: 模拟时钟 + 有效时间追踪 + 作息管理
-3. **三重数据管理**: 生活哲学 + 任务管理 + 思考记录
-4. **本地存储**: 使用 localStorage 和 SQLite 双重存储
-5. **数据导入/导出**: 支持 JSON 格式的数据导入导出
-6. **API 架构**: RESTful API 设计，支持前后端分离
-7. **响应式设计**: 适配不同屏幕尺寸
-8. **流畅导航**: 时态页面间无缝切换 + 全局快捷入口
-9. **全局组件**: 思考记录按钮全局可用
+3. **日程安排系统**: Google Calendar风格 + 拖拽调度 + 24小时时间轴
+4. **三重数据管理**: 生活哲学 + 任务管理 + 思考记录
+5. **开销与票据记录**: `/past/expenses` 管理金额、货币、票据图片
+6. **完成时间线**: `/past/completed` 展示历史完成记录与感悟
+7. **本地存储**: 使用 localStorage 和 SQLite 双重存储
+8. **数据导入/导出**: 支持 JSON 格式的数据导入导出
+9. **API 架构**: RESTful API 设计，支持前后端分离
+10. **响应式设计**: 适配不同屏幕尺寸
+11. **流畅导航**: 时态页面间无缝切换 + 全局快捷入口
+12. **全局组件**: 思考记录按钮全局可用
 
 ## API 路由
 
@@ -309,6 +406,22 @@ interface Thought {
   - 自动生成压缩版本
   - 按日期组织存储目录
 
+### 日程安排 API
+- `GET /api/schedule/week?start=<date>` - 获取周日程安排
+- `GET /api/schedule/day?date=<date>` - 获取日日程安排
+- `POST /api/schedule/blocks` - 创建日程块
+  - 自动检测时间冲突
+  - 支持任务关联和冗余字段存储
+- `PUT /api/schedule/blocks?id=<id>` - 更新日程块
+  - 支持时间、日期、备注、状态更新
+  - 编辑时排除自身进行冲突检测
+- `DELETE /api/schedule/blocks?id=<id>` - 删除日程块
+- `GET /api/schedule/conflicts?date=<date>&start=<time>&end=<time>&excludeId=<id>` - 检测时间冲突
+  - 支持排除指定ID（用于编辑时冲突检测）
+- `GET /api/tasks/schedulable` - 获取可调度任务
+  - 返回子子任务和无子任务的子任务
+  - 过滤已完成任务
+
 ## 开发命令
 
 ```bash
@@ -330,6 +443,10 @@ npm run start
 # 代码检查
 npm run lint
 ```
+
+## 未决事项
+- 票据 PDF 上传与预览支持仍在评估，当前仅前端限制为图片类型
+- 需要设计开销票据的长期清理/归档策略
 
 ## 代码规范
 - 使用 TypeScript 严格类型检查
@@ -424,6 +541,29 @@ CREATE TABLE memories (
 )
 ```
 
+### 日程安排数据库 (schedule.db)
+```sql
+CREATE TABLE schedule_blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL,            -- 关联的任务ID
+  date DATE NOT NULL,                  -- 日期 (YYYY-MM-DD)
+  start_time TIME NOT NULL,            -- 开始时间 (HH:MM)
+  end_time TIME NOT NULL,              -- 结束时间 (HH:MM)
+  comment TEXT,                        -- 备注信息
+  status TEXT DEFAULT 'scheduled',     -- 状态：scheduled/in_progress/completed/cancelled
+
+  -- 冗余字段用于性能优化
+  task_title TEXT NOT NULL,            -- 任务标题
+  parent_title TEXT,                   -- 父任务标题
+  grandparent_title TEXT,              -- 祖父任务标题
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(task_id, date, start_time)    -- 防止同一任务在同一时间重复调度
+)
+```
+
 ## 注意事项
 1. 所有组件都使用 "use client" 标记为客户端组件
 2. 数据优先从 API 加载，失败则使用本地存储
@@ -437,6 +577,9 @@ CREATE TABLE memories (
 10. 习惯打卡照片存储在本地 `uploads/habits/` 目录
 11. 每个习惯每天只能打卡一次（数据库UNIQUE约束）
 12. 每天最多只能添加3个决策（API层面限制）
+13. 日程安排使用@dnd-kit实现拖拽功能，支持鼠标和触摸操作
+14. 只有子子任务和无子任务的子任务可以被调度到日程中
+15. 睡眠时间（23:00-07:00）标记为灰色，但仍允许安排任务
 
 ## 常见问题
 
@@ -763,6 +906,40 @@ pending (待完成) → completed (已完成)
 ✅ **习惯追踪系统** - GitHub风格热力图 + 完整打卡记录功能
 ✅ **每日三大决策系统** - 贝佐斯理念的决策管理功能
 ✅ **记忆相册系统** - 小红书风格瀑布流 + 完整照片管理功能
+✅ **日程安排系统** - Google Calendar风格 + 拖拽调度 + 24小时时间轴
+
+## 最新更新 - 日程安排系统 (2025-09-23)
+
+### 完整日程管理功能
+基于Google Calendar设计理念的现代化时间管理系统：
+
+#### 核心功能
+- ✅ **Google Calendar风格界面**: 24小时时间轴 + 7天周视图，专业且直观
+- ✅ **@dnd-kit拖拽系统**: 支持鼠标和触摸拖拽，流畅的拖拽体验
+- ✅ **智能任务池**: 只显示可调度任务（子子任务 + 无子任务的子任务）
+- ✅ **完整编辑功能**: 时间、日期、备注的完整编辑，复用统一UI组件
+- ✅ **智能冲突检测**: 创建和编辑时自动检测冲突，编辑时排除自身
+- ✅ **睡眠时间标识**: 23:00-07:00 灰色背景 + 💤 图标标记
+- ✅ **自适应任务池**: 根据展开内容智能调整高度（50vh-80vh）
+
+#### 技术实现
+- **完整API架构**: 7个专门端点支持CRUD、冲突检测、数据查询
+- **独立数据库**: schedule.db专门存储，支持性能优化冗余字段
+- **状态管理**: scheduled/in_progress/completed/cancelled 完整生命周期
+- **拖拽配置**: MouseSensor + TouchSensor，精确的激活约束
+- **UI组件复用**: TimeSettingModal支持create/edit双模式
+
+#### 界面特色
+- **24小时完整视图**: 从00:00到23:59，不遗漏任何时间段
+- **任务块可视化**: 根据时长自动调整高度，状态颜色编码
+- **拖拽反馈**: 实时显示时间预览，睡眠时间特殊提示
+- **响应式设计**: 左右分栏，任务池自适应，时间轴固定
+
+#### 用户体验
+- **零学习成本**: Google Calendar风格，用户熟悉的交互模式
+- **平滑动画**: 300ms过渡效果，高度变化流畅自然
+- **智能预填**: 拖拽到具体时间槽自动预填开始和结束时间
+- **错误处理**: 完整的toast提示，清晰的错误信息
 
 ## 后续优化建议
 

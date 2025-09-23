@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb } from "lucide-react"
+import { Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb, Calendar } from "lucide-react"
 import Link from "next/link"
 import AnalogClock from "@/components/analog-clock"
 import { HabitTracker } from "@/components/habit-tracker"
@@ -71,12 +71,12 @@ export default function PresentPage() {
         </div>
 
         {/* 快捷导航 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link href="/philosophy">
-            <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Link href="/schedule">
+            <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-blue-200 bg-blue-50">
               <div className="flex flex-col items-center">
-                <Home className="w-6 h-6 mb-2 text-gray-600" />
-                <span className="text-sm text-gray-700">人生哲学</span>
+                <Calendar className="w-6 h-6 mb-2 text-blue-600" />
+                <span className="text-sm text-blue-700 font-medium">日程安排</span>
               </div>
             </Card>
           </Link>
@@ -85,6 +85,14 @@ export default function PresentPage() {
               <div className="flex flex-col items-center">
                 <ListTodo className="w-6 h-6 mb-2 text-gray-600" />
                 <span className="text-sm text-gray-700">任务管理</span>
+              </div>
+            </Card>
+          </Link>
+          <Link href="/philosophy">
+            <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="flex flex-col items-center">
+                <Home className="w-6 h-6 mb-2 text-gray-600" />
+                <span className="text-sm text-gray-700">人生哲学</span>
               </div>
             </Card>
           </Link>

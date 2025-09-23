@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import tasksDbManager from '@/lib/tasks-db'
+import completedTasksDbManager from '@/lib/completed-tasks-db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,16 @@ export async function GET(request: NextRequest) {
       parseInt(parentId),
       level ? parseInt(level) : 1
     )
-    return NextResponse.json(subTasks)
+
+    const taskIds = subTasks.map(task => task.id).filter((id): id is number => Boolean(id))
+    const completionMap = completedTasksDbManager.getTasksCompletionStatus(taskIds)
+
+    const subTasksWithCompletion = subTasks.map(task => ({
+      ...task,
+      completion: task.id ? completionMap.get(task.id) ?? { taskId: task.id, isCompleted: false } : { taskId: 0, isCompleted: false }
+    }))
+
+    return NextResponse.json(subTasksWithCompletion)
   } catch (error) {
     console.error('Error fetching subtasks:', error)
     return NextResponse.json(

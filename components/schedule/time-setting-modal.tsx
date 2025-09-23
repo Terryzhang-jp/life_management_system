@@ -1,0 +1,376 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { X, Clock, Calendar, AlertTriangle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ScheduleBlock } from '@/lib/schedule-db'
+
+interface Task {
+  id: number
+  title: string
+  type: string
+  level: number
+  priority?: number
+  deadline?: string
+  parentId?: number
+  parentTitle?: string
+  grandparentId?: number
+  grandparentTitle?: string
+}
+
+interface TimeSettingModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: (scheduleBlock: Omit<ScheduleBlock, 'id'>) => void
+  onUpdate?: (blockId: number, scheduleBlock: Partial<ScheduleBlock>) => void
+  mode?: 'create' | 'edit'
+  existingBlock?: ScheduleBlock
+  task: Task | null
+  date: string
+  conflicts?: ScheduleBlock[]
+  suggestedStartTime?: string
+  suggestedEndTime?: string
+}
+
+interface QuickTimeOption {
+  label: string
+  duration: number // minutes
+}
+
+const quickTimeOptions: QuickTimeOption[] = [
+  { label: '30分钟', duration: 30 },
+  { label: '1小时', duration: 60 },
+  { label: '2小时', duration: 120 },
+  { label: '半天', duration: 240 }
+]
+
+export function TimeSettingModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  onUpdate,
+  mode = 'create',
+  existingBlock,
+  task,
+  date,
+  conflicts = [],
+  suggestedStartTime = '09:00',
+  suggestedEndTime = '10:00'
+}: TimeSettingModalProps) {
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('10:00')
+  const [comment, setComment] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [currentConflicts, setCurrentConflicts] = useState<ScheduleBlock[]>([])
+
+  // Reset form when modal opens/closes or task changes
+  useEffect(() => {
+    if (isOpen) {
+      if (mode === 'edit' && existingBlock) {
+        // Pre-fill with existing block data
+        setStartTime(existingBlock.startTime)
+        setEndTime(existingBlock.endTime)
+        setComment(existingBlock.comment || '')
+        setCurrentConflicts([])
+      } else if (task) {
+        // Create mode with suggested times
+        setStartTime(suggestedStartTime)
+        setEndTime(suggestedEndTime)
+        setComment('')
+        setCurrentConflicts([])
+      }
+    }
+  }, [isOpen, mode, existingBlock, task, suggestedStartTime, suggestedEndTime])
+
+  // Check conflicts when time changes
+  useEffect(() => {
+    if (startTime && endTime && startTime < endTime) {
+      checkConflicts()
+    }
+  }, [startTime, endTime, date])
+
+  const checkConflicts = async () => {
+    if (!startTime || !endTime || startTime >= endTime) return
+
+    setChecking(true)
+    try {
+      let url = `/api/schedule/conflicts?date=${date}&start=${startTime}&end=${endTime}`
+      // In edit mode, exclude the current block from conflict checking
+      if (mode === 'edit' && existingBlock?.id) {
+        url += `&excludeId=${existingBlock.id}`
+      }
+
+      const response = await fetch(url)
+      const conflicts = await response.json()
+      setCurrentConflicts(conflicts)
+    } catch (error) {
+      console.error('Error checking conflicts:', error)
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const today = new Date()
+    const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()]
+    const dateFormat = `${date.getMonth() + 1}/${date.getDate()}`
+
+    if (diffDays === 0) return `${dateFormat} (今天) 周${dayOfWeek}`
+    if (diffDays === 1) return `${dateFormat} (明天) 周${dayOfWeek}`
+    if (diffDays > 0) return `${dateFormat} (${diffDays}天后) 周${dayOfWeek}`
+    return `${dateFormat} (${Math.abs(diffDays)}天前) 周${dayOfWeek}`
+  }
+
+  const calculateDuration = () => {
+    if (!startTime || !endTime) return 0
+    const start = new Date(`1970-01-01T${startTime}`)
+    const end = new Date(`1970-01-01T${endTime}`)
+    return (end.getTime() - start.getTime()) / (1000 * 60) // minutes
+  }
+
+  const formatDuration = (minutes: number) => {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (hours === 0) return `${mins}分钟`
+    if (mins === 0) return `${hours}小时`
+    return `${hours}小时${mins}分钟`
+  }
+
+  const applyQuickTime = (option: QuickTimeOption) => {
+    const start = new Date(`1970-01-01T${startTime}`)
+    const end = new Date(start.getTime() + option.duration * 60 * 1000)
+    setEndTime(end.toTimeString().slice(0, 5))
+  }
+
+  const handleConfirm = () => {
+    if (!startTime || !endTime || startTime >= endTime) return
+
+    if (mode === 'edit' && existingBlock && onUpdate) {
+      // Edit mode - update existing block
+      const updates: Partial<ScheduleBlock> = {
+        date,
+        startTime,
+        endTime,
+        comment: comment.trim() || undefined
+      }
+      onUpdate(existingBlock.id!, updates)
+    } else if (mode === 'create' && task) {
+      // Create mode - create new block
+      const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
+        taskId: task.id,
+        date,
+        startTime,
+        endTime,
+        comment: comment.trim() || undefined,
+        status: 'scheduled',
+        taskTitle: task.title,
+        parentTitle: task.level === 2 ? task.parentTitle : undefined,
+        grandparentTitle: task.level === 2 ? task.grandparentTitle : undefined
+      }
+      onConfirm(scheduleBlock)
+    }
+
+    onClose()
+  }
+
+  if (!isOpen) {
+    console.log('TimeSettingModal not rendering:', { isOpen })
+    return null
+  }
+
+  if (mode === 'create' && !task) {
+    console.log('TimeSettingModal create mode requires task')
+    return null
+  }
+
+  if (mode === 'edit' && !existingBlock) {
+    console.log('TimeSettingModal edit mode requires existingBlock')
+    return null
+  }
+
+  console.log('TimeSettingModal rendering in', mode, 'mode')
+
+  const duration = calculateDuration()
+  const hasConflicts = currentConflicts.length > 0
+  const isValidTime = startTime < endTime
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <Card className="w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-semibold">
+              {mode === 'edit' ? '编辑任务时间' : '安排任务时间'}
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* Task Info */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            {mode === 'edit' && existingBlock ? (
+              <div>
+                <div className="font-medium text-gray-900">{existingBlock.taskTitle}</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  {existingBlock.grandparentTitle && existingBlock.parentTitle
+                    ? `${existingBlock.grandparentTitle} › ${existingBlock.parentTitle}`
+                    : existingBlock.parentTitle
+                  }
+                </div>
+              </div>
+            ) : task ? (
+              <div>
+                <div className="font-medium text-gray-900">{task.title}</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  {task.level === 2 && task.grandparentTitle && task.parentTitle
+                    ? `${task.grandparentTitle} › ${task.parentTitle}`
+                    : task.parentTitle
+                  }
+                </div>
+                {task.deadline && (
+                  <div className="text-sm text-orange-600 mt-1">
+                    📅 截止: {new Date(task.deadline).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Date Info */}
+          <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+            <Calendar className="w-4 h-4 text-blue-600" />
+            <span className="font-medium text-blue-900">
+              {formatDate(date)}
+            </span>
+          </div>
+
+          {/* Time Settings */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="start-time" className="text-sm font-medium">
+                  开始时间
+                </Label>
+                <Input
+                  id="start-time"
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="end-time" className="text-sm font-medium">
+                  结束时间
+                </Label>
+                <Input
+                  id="end-time"
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Duration Display */}
+            {isValidTime && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Clock className="w-4 h-4" />
+                <span>时长: {formatDuration(duration)}</span>
+              </div>
+            )}
+
+            {/* Invalid time warning */}
+            {!isValidTime && startTime && endTime && (
+              <div className="flex items-center gap-2 text-sm text-red-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span>结束时间必须晚于开始时间</span>
+              </div>
+            )}
+
+            {/* Quick Time Options */}
+            <div>
+              <Label className="text-sm font-medium">快捷时长</Label>
+              <div className="flex gap-2 mt-1 flex-wrap">
+                {quickTimeOptions.map((option) => (
+                  <Button
+                    key={option.duration}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyQuickTime(option)}
+                    className="text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Conflicts Warning */}
+          {hasConflicts && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 text-red-800 font-medium mb-2">
+                <AlertTriangle className="w-4 h-4" />
+                时间冲突
+              </div>
+              <div className="space-y-1">
+                {currentConflicts.map((conflict) => (
+                  <div key={conflict.id} className="text-sm text-red-700">
+                    {conflict.startTime} - {conflict.endTime}: {conflict.taskTitle}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comment */}
+          <div>
+            <Label htmlFor="comment" className="text-sm font-medium">
+              备注 (可选)
+            </Label>
+            <Textarea
+              id="comment"
+              placeholder="添加备注信息..."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              className="mt-1 resize-none"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="flex-1"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={!isValidTime || checking}
+              className="flex-1"
+            >
+              {checking ? '检查中...' : (mode === 'edit' ? '确认更新' : '确认安排')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

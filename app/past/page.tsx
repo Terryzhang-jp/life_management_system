@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Clock, BookOpen, History } from "lucide-react"
+import { ArrowRight, Clock, BookOpen, History, CheckCircle2, Wallet } from "lucide-react"
 import Link from "next/link"
 import { MemoriesGallery } from "@/components/memories-gallery"
 
@@ -38,9 +38,9 @@ export default function PastPage() {
 
         {/* 内容区域 */}
         <div className="px-6">
-          {/* 缩小的思考记录入口 */}
-          <div className="mb-6">
-            <Card className="max-w-md">
+          {/* 快捷入口 */}
+          <div className="mb-6 grid gap-4 md:grid-cols-3 max-w-4xl">
+            <Card>
               <CardContent className="p-4">
                 <h3 className="text-sm font-medium flex items-center mb-2">
                   <BookOpen className="w-4 h-4 mr-2" />
@@ -49,6 +49,32 @@ export default function PastPage() {
                 <Link href="/thoughts">
                   <Button variant="outline" size="sm" className="text-xs">
                     查看思考记录
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="text-sm font-medium flex items-center mb-2">
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  完成任务时间线
+                </h3>
+                <Link href="/past/completed">
+                  <Button variant="outline" size="sm" className="text-xs">
+                    回顾我的成就
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="text-sm font-medium flex items-center mb-2">
+                  <Wallet className="w-4 h-4 mr-2" />
+                  开销记录
+                </h3>
+                <Link href="/past/expenses">
+                  <Button variant="outline" size="sm" className="text-xs">
+                    记录每一次投入
                   </Button>
                 </Link>
               </CardContent>

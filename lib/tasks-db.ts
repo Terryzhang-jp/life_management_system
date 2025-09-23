@@ -97,6 +97,35 @@ class TasksDatabaseManager {
     }
   }
 
+  getTask(id: number): Task | null {
+    const db = this.getDb()
+    const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any
+
+    if (!row) {
+      return null
+    }
+
+    const hasUnclearChildrenRow = db.prepare(
+      'SELECT 1 FROM tasks WHERE parent_id = ? AND is_unclear = 1 LIMIT 1'
+    ).get(row.id) as any
+
+    return {
+      id: row.id,
+      type: row.type as TaskType,
+      title: row.title,
+      description: row.description || '',
+      priority: row.priority ?? 999,
+      parentId: row.parent_id || undefined,
+      level: row.level ?? 0,
+      deadline: row.deadline || undefined,
+      isUnclear: Boolean(row.is_unclear),
+      unclearReason: row.unclear_reason || '',
+      hasUnclearChildren: Boolean(hasUnclearChildrenRow),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+  }
+
   async getAllTasks(): Promise<TasksData> {
     const db = this.getDb()
     // 只获取主任务（level = 0 或 level 为空）
@@ -346,5 +375,73 @@ class TasksDatabaseManager {
 }
 
 const tasksDbManager = new TasksDatabaseManager()
+
+// Export function for getting schedulable tasks (level 2 tasks and level 1 tasks without children)
+export function getAllSchedulableTasks() {
+  const db = tasksDbManager.getDb()
+
+  // Get all level 2 tasks (sub-sub-tasks)
+  const level2Tasks = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      p.parent_id as grandparentId,
+      gp.title as grandparentTitle
+    FROM tasks t
+    LEFT JOIN tasks p ON t.parent_id = p.id
+    LEFT JOIN tasks gp ON p.parent_id = gp.id
+    WHERE t.level = 2
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  // Get level 1 tasks that don't have children
+  const level1TasksWithoutChildren = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    LEFT JOIN tasks p ON t.parent_id = p.id
+    WHERE t.level = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM tasks child WHERE child.parent_id = t.id
+      )
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  const allTasks = [...level2Tasks, ...level1TasksWithoutChildren]
+
+  if (allTasks.length === 0) {
+    return []
+  }
+
+  // Filter out completed tasks using completed-tasks-db
+  const completedTasksDb = require('./completed-tasks-db').default
+
+  // Get completion status for all tasks
+  const taskIds = allTasks.map(task => task.id)
+  const completionStatusMap = completedTasksDb.getTasksCompletionStatus(taskIds)
+
+  // Filter out completed tasks
+  const schedulableTasks = allTasks.filter(task => {
+    const status = completionStatusMap.get(task.id)
+    return !status?.isCompleted
+  })
+
+  return schedulableTasks
+}
 
 export default tasksDbManager
