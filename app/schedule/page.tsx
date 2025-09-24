@@ -18,7 +18,7 @@ import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { WeekSchedule, ScheduleBlock } from '@/lib/schedule-db'
@@ -348,11 +348,11 @@ export default function SchedulePage() {
   }
 
   const handleEditBlock = (block: ScheduleBlock) => {
-    // TODO: Implement block editing functionality
-    toast({
-      title: "功能开发中",
-      description: "编辑任务时间功能即将推出",
-    })
+    setEditingBlock(block)
+    setSelectedDate(block.date)
+    setQuickCreateMode(false)
+    setDraggedTask(null)
+    setTimeModalOpen(true)
   }
 
   const handleDeleteBlock = async (blockId: number) => {
@@ -439,7 +439,26 @@ export default function SchedulePage() {
           </div>
 
           {/* Right Panel - Timeline Week View */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
+            {/* Quick Navigation */}
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const today = new Date()
+                  const day = today.getDay()
+                  const diff = today.getDate() - day + (day === 0 ? -6 : 1) // Get Monday
+                  const monday = new Date(today.setDate(diff))
+                  const weekStart = monday.toISOString().split('T')[0]
+                  setCurrentWeekStart(weekStart)
+                }}
+                className="flex items-center gap-2"
+              >
+                <Clock className="w-4 h-4" />
+                跳转到今天
+              </Button>
+            </div>
+
             <TimelineWeekView
               weekSchedule={weekSchedule}
               currentWeekStart={currentWeekStart}

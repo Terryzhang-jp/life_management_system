@@ -3,7 +3,6 @@ import {
   createScheduleBlock,
   updateScheduleBlock,
   deleteScheduleBlock,
-  checkTimeConflict,
   ScheduleBlock
 } from '@/lib/schedule-db'
 
@@ -12,20 +11,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ScheduleBlock
 
-    // Check for time conflicts
-    const conflicts = checkTimeConflict(
-      body.date,
-      body.startTime,
-      body.endTime
-    )
-
-    if (conflicts.length > 0) {
-      return NextResponse.json({
-        error: 'Time conflict detected',
-        conflicts
-      }, { status: 409 })
-    }
-
+    // Allow overlapping time blocks - no conflict checking
     const newBlock = createScheduleBlock(body)
     return NextResponse.json(newBlock, { status: 201 })
   } catch (error) {
@@ -46,23 +32,7 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json() as Partial<ScheduleBlock>
 
-    // Check for time conflicts if time is being updated
-    if (body.date || body.startTime || body.endTime) {
-      const conflicts = checkTimeConflict(
-        body.date!,
-        body.startTime!,
-        body.endTime!,
-        parseInt(id)
-      )
-
-      if (conflicts.length > 0) {
-        return NextResponse.json({
-          error: 'Time conflict detected',
-          conflicts
-        }, { status: 409 })
-      }
-    }
-
+    // Allow overlapping time blocks - no conflict checking
     updateScheduleBlock(parseInt(id), body)
     return NextResponse.json({ success: true })
   } catch (error) {

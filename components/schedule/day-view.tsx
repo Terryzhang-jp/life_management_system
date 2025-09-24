@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { X, ArrowLeft, Clock, Edit, Trash2, Play, Square, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Play, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock } from '@/lib/schedule-db'
+import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/schedule-layout'
+import { Tooltip } from '@/components/ui/tooltip'
 
 interface DayViewProps {
   isOpen: boolean
@@ -18,12 +19,6 @@ interface DayViewProps {
   onDeleteBlock: (blockId: number) => void
 }
 
-interface TimeSlot {
-  hour: number
-  label: string
-  blocks: ScheduleBlock[]
-}
-
 export function DayView({
   isOpen,
   onClose,
@@ -33,7 +28,62 @@ export function DayView({
   onEditBlock,
   onDeleteBlock
 }: DayViewProps) {
+  const MINUTE_HEIGHT = 2 // pixels per minute for better readability
+  // Removed fixed MIN_BLOCK_HEIGHT to allow natural sizing based on duration
   const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null)
+  const [currentTime, setCurrentTime] = useState(new Date())
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Calculate layouts for all blocks using the new algorithm
+  const blockLayouts = useMemo(() => {
+    return calculateBlockLayouts(blocks)
+  }, [blocks])
+
+  // Calculate display level based on block height
+  const getDisplayLevel = (heightInPixels: number) => {
+    if (heightInPixels < 25) return 'minimal'      // < 25px: Only show task title
+    if (heightInPixels < 45) return 'title-only'   // < 45px: Title only (no time)
+    if (heightInPixels < 65) return 'basic'        // < 65px: Title + time
+    return 'full'                                  // >= 65px: All information
+  }
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Auto-scroll to current time
+  useEffect(() => {
+    if (isToday() && scrollRef.current) {
+      const currentPosition = getCurrentTimePosition()
+      if (currentPosition !== null) {
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({
+            top: Math.max(0, currentPosition - 200),
+            behavior: 'smooth'
+          })
+        }, 100)
+      }
+    }
+  }, [isOpen, currentTime])
+
+  const isToday = () => {
+    const today = new Date()
+    const viewDate = new Date(date)
+    return today.toDateString() === viewDate.toDateString()
+  }
+
+  const getCurrentTimePosition = () => {
+    if (!isToday()) return null
+    const now = currentTime
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+    const startMinutes = currentHour * 60 + currentMinute
+    return startMinutes * MINUTE_HEIGHT
+  }
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -49,260 +99,231 @@ export function DayView({
     return `${dateFormat} (${Math.abs(diffDays)}天前) 周${dayOfWeek}`
   }
 
-  // Generate time slots from 7:00 to 23:00
-  const generateTimeSlots = (): TimeSlot[] => {
-    const slots: TimeSlot[] = []
-
-    for (let hour = 7; hour <= 23; hour++) {
-      const hourBlocks = blocks.filter(block => {
-        const blockStartHour = parseInt(block.startTime.split(':')[0])
-        const blockEndHour = parseInt(block.endTime.split(':')[0])
-        return blockStartHour <= hour && blockEndHour > hour
-      })
-
-      slots.push({
-        hour,
-        label: `${hour.toString().padStart(2, '0')}:00`,
-        blocks: hourBlocks
-      })
-    }
-
-    return slots
-  }
-
   const getStatusIcon = (status: ScheduleBlock['status']) => {
     switch (status) {
-      case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case 'in_progress':
-        return <Play className="w-4 h-4 text-yellow-600" />
-      case 'cancelled':
-        return <Square className="w-4 h-4 text-gray-400" />
-      default:
-        return <Clock className="w-4 h-4 text-blue-600" />
+      case 'completed': return <CheckCircle className="w-4 h-4" />
+      case 'in_progress': return <Play className="w-4 h-4" />
+      default: return null
     }
   }
 
-  const getStatusColor = (status: ScheduleBlock['status']) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 border-green-200 text-green-800'
-      case 'in_progress': return 'bg-yellow-100 border-yellow-200 text-yellow-800'
-      case 'cancelled': return 'bg-gray-100 border-gray-200 text-gray-600'
-      default: return 'bg-blue-100 border-blue-200 text-blue-800'
-    }
-  }
-
-  const getNextStatus = (currentStatus: ScheduleBlock['status']): ScheduleBlock['status'] => {
-    switch (currentStatus) {
-      case 'scheduled': return 'in_progress'
-      case 'in_progress': return 'completed'
-      default: return 'scheduled'
-    }
-  }
-
-  const getStatusLabel = (status: ScheduleBlock['status']) => {
-    switch (status) {
-      case 'completed': return '已完成'
-      case 'in_progress': return '进行中'
-      case 'cancelled': return '已取消'
-      default: return '计划中'
-    }
-  }
-
-  const calculateBlockHeight = (block: ScheduleBlock) => {
-    const start = new Date(`1970-01-01T${block.startTime}`)
-    const end = new Date(`1970-01-01T${block.endTime}`)
-    const duration = (end.getTime() - start.getTime()) / (1000 * 60) // minutes
-    return Math.max(40, duration * 0.8) // Minimum 40px, 0.8px per minute
-  }
-
-  const calculateBlockPosition = (block: ScheduleBlock, hour: number) => {
-    const blockStart = new Date(`1970-01-01T${block.startTime}`)
-    const blockStartHour = blockStart.getHours()
-    const blockStartMinute = blockStart.getMinutes()
-
-    if (blockStartHour === hour) {
-      return blockStartMinute * (60 / 60) // Position within the hour slot
-    }
-    return 0
+  // Generate 24 hour time slots
+  const generateTimeSlots = () => {
+    return Array.from({ length: 24 }, (_, i) => ({
+      hour: i,
+      label: `${i.toString().padStart(2, '0')}:00`
+    }))
   }
 
   const timeSlots = generateTimeSlots()
 
   if (!isOpen) return null
 
-  // Calculate summary stats
-  const completedBlocks = blocks.filter(b => b.status === 'completed').length
   const totalBlocks = blocks.length
-  const totalMinutes = blocks.reduce((sum, block) => {
-    const start = new Date(`1970-01-01T${block.startTime}`)
-    const end = new Date(`1970-01-01T${block.endTime}`)
-    return sum + (end.getTime() - start.getTime()) / (1000 * 60)
-  }, 0)
+  const completedBlocks = blocks.filter(b => b.status === 'completed').length
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
-        <CardHeader className="pb-4 flex-shrink-0">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-4xl max-h-[90vh] bg-white">
+        {/* Header */}
+        <CardHeader className="border-b border-gray-200 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={onClose}>
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <div>
-                <CardTitle className="text-lg font-semibold">
+                <CardTitle className="text-lg font-medium text-black">
                   {formatDate(date)}
                 </CardTitle>
-                <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                  <span>{totalBlocks} 个任务</span>
-                  <span>{completedBlocks}/{totalBlocks} 已完成</span>
-                  <span>{Math.round(totalMinutes / 60 * 10) / 10}小时</span>
+                <div className="text-sm text-gray-600 mt-1">
+                  {totalBlocks} 个任务 · {completedBlocks} 已完成
                 </div>
               </div>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 overflow-y-auto">
+        {/* Content */}
+        <CardContent ref={scrollRef} className="p-0 overflow-y-auto max-h-[calc(90vh-120px)]">
           {blocks.length === 0 ? (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-gray-400">
               <div className="text-center">
-                <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <div className="text-lg font-medium">这一天还没有安排任务</div>
+                <div className="text-lg">这一天还没有安排任务</div>
                 <div className="text-sm mt-1">从左侧任务池拖拽任务到日程中</div>
               </div>
             </div>
           ) : (
-            <div className="space-y-1">
-              {timeSlots.map((slot) => (
-                <div key={slot.hour} className="flex">
-                  {/* Time Label */}
-                  <div className="w-16 flex-shrink-0 text-sm text-gray-500 pt-2">
+            <div className="flex min-h-full">
+              {/* Time grid - left column */}
+              <div className="w-16 border-r border-gray-200 flex-shrink-0 bg-gray-50">
+                {timeSlots.map((slot) => (
+                  <div
+                    key={slot.hour}
+                    className="flex items-start justify-center pt-1 text-xs text-gray-600 border-b border-gray-100"
+                    style={{ height: `${60 * MINUTE_HEIGHT}px` }}
+                  >
                     {slot.label}
                   </div>
+                ))}
+              </div>
 
-                  {/* Time Slot Content */}
-                  <div className="flex-1 min-h-[60px] border-l border-gray-100 pl-4 relative">
-                    {slot.blocks.length === 0 ? (
-                      <div className="h-full border-b border-gray-50"></div>
-                    ) : (
-                      slot.blocks.map((block) => {
-                        const isBlockStart = parseInt(block.startTime.split(':')[0]) === slot.hour
+              {/* Main content area - right column */}
+              <div className="flex-1 relative bg-white">
+                {/* Background grid lines */}
+                <div className="absolute inset-0">
+                {timeSlots.map((slot) => (
+                  <div
+                    key={slot.hour}
+                    className="border-b border-gray-100"
+                    style={{ height: `${60 * MINUTE_HEIGHT}px` }}
+                  />
+                ))}
+                </div>
 
-                        if (!isBlockStart) return null
+                {/* Current time line */}
+                {isToday() && getCurrentTimePosition() !== null && (
+                  <div
+                    className="absolute left-0 right-0 z-20 pointer-events-none"
+                    style={{ top: `${getCurrentTimePosition()}px` }}
+                  >
+                    <div className="h-0.5 bg-red-500 shadow-sm"></div>
+                    <div className="absolute -left-16 -top-2.5 bg-red-500 text-white text-xs px-2 py-0.5 rounded font-mono z-30">
+                      {currentTime.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })}
+                    </div>
+                  </div>
+                )}
 
-                        return (
-                          <div
-                            key={block.id}
-                            className={cn(
-                              'absolute left-4 right-4 rounded-lg border p-3 cursor-pointer transition-all hover:shadow-md',
-                              getStatusColor(block.status),
-                              selectedBlock?.id === block.id && 'ring-2 ring-blue-500'
-                            )}
-                            style={{
-                              top: calculateBlockPosition(block, slot.hour),
-                              height: calculateBlockHeight(block)
-                            }}
-                            onClick={() => setSelectedBlock(selectedBlock?.id === block.id ? null : block)}
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                {getStatusIcon(block.status)}
-                                <span className="font-medium text-sm">
-                                  {block.taskTitle}
-                                </span>
-                              </div>
+                {/* Task blocks */}
+                <div className="relative" style={{ height: `${24 * 60 * MINUTE_HEIGHT}px` }}>
+                  {blocks.map((block) => {
+                    const layout = blockLayouts.get(block.id!)
+                    const verticalLayout = calculateBlockVerticalLayout(block, MINUTE_HEIGHT)
+                    const displayLevel = getDisplayLevel(verticalLayout.height)
 
-                              <Badge variant="outline" className="text-xs">
-                                {getStatusLabel(block.status)}
-                              </Badge>
-                            </div>
+                    if (!layout) return null
 
-                            <div className="text-xs opacity-75 mb-2">
-                              {block.startTime} - {block.endTime}
-                              {block.parentTitle && (
-                                <span className="ml-2">
-                                  {block.grandparentTitle && `${block.grandparentTitle} › `}
-                                  {block.parentTitle}
-                                </span>
+                    return (
+                      <div
+                        key={block.id}
+                        className={cn(
+                          'absolute bg-white border-2 rounded-md cursor-pointer hover:shadow-lg transition-all group',
+                          // Adjust padding based on display level
+                          displayLevel === 'minimal' ? 'p-1' : 'p-2',
+                          block.status === 'completed' && 'border-green-600 text-green-700 hover:bg-green-50',
+                          block.status === 'in_progress' && 'border-yellow-600 text-yellow-700 hover:bg-yellow-50',
+                          block.status === 'cancelled' && 'border-gray-500 text-gray-600 hover:bg-gray-50 opacity-60',
+                          block.status === 'scheduled' && 'border-gray-800 text-gray-800 hover:bg-gray-50',
+                          selectedBlock?.id === block.id && 'ring-2 ring-blue-400 shadow-lg'
+                        )}
+                        style={{
+                          top: `${verticalLayout.top}px`,
+                          height: `${verticalLayout.height}px`,
+                          left: `calc(${layout.left}% + 4px)`,
+                          width: `calc(${layout.width}% - 8px)`,
+                          zIndex: selectedBlock?.id === block.id ? 20 : 10
+                        }}
+                        onClick={() => setSelectedBlock(selectedBlock?.id === block.id ? null : block)}
+                      >
+                        {/* For minimal blocks, wrap entire block in Tooltip */}
+                        {displayLevel === 'minimal' ? (
+                          <Tooltip content={`${block.taskTitle} (${block.startTime} - ${block.endTime})`}>
+                            <div className="w-full h-full"></div>
+                          </Tooltip>
+                        ) : (
+                          <div className="flex flex-col h-full">
+                          {/* Conditional content based on display level */}
+                          <div className="flex items-start justify-between mb-1">
+                            <div className="flex-1 min-w-0">
+                              {/* Time info - only show for 'basic' and 'full' levels */}
+                              {(displayLevel === 'basic' || displayLevel === 'full') && (
+                                <div className="text-xs text-gray-600 font-mono mb-0.5">
+                                  {block.startTime} - {block.endTime}
+                                </div>
+                              )}
+
+                              {/* Task title - always show except for 'minimal' */}
+                              {displayLevel !== 'minimal' && (
+                                <Tooltip content={block.taskTitle}>
+                                  <div className={cn(
+                                    "w-full font-medium text-gray-900 leading-tight break-words",
+                                    displayLevel === 'title-only' ? "text-xs line-clamp-3" : "text-sm line-clamp-2"
+                                  )}>
+                                    {block.taskTitle}
+                                  </div>
+                                </Tooltip>
                               )}
                             </div>
 
-                            {block.comment && (
-                              <div className="text-xs opacity-75 italic">
-                                {block.comment}
-                              </div>
-                            )}
-
-                            {/* Action Buttons */}
-                            {selectedBlock?.id === block.id && (
-                              <div className="flex gap-1 mt-2">
+                            {/* Edit and Delete buttons - show for basic and full levels */}
+                            {(displayLevel === 'basic' || displayLevel === 'full') && (
+                              <div className="flex gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    onUpdateStatus(block.id!, getNextStatus(block.status))
-                                  }}
-                                  className="h-6 text-xs"
-                                >
-                                  {block.status === 'scheduled' && '开始'}
-                                  {block.status === 'in_progress' && '完成'}
-                                  {block.status === 'completed' && '重置'}
-                                  {block.status === 'cancelled' && '重置'}
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
+                                  variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     onEditBlock(block)
                                   }}
-                                  className="h-6 text-xs"
+                                  className="h-4 w-4 p-0 hover:bg-blue-100 rounded"
                                 >
-                                  <Edit className="w-3 h-3" />
+                                  <Edit className="w-2.5 h-2.5" />
                                 </Button>
-
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (confirm('确定删除这个时间安排吗？')) {
                                       onDeleteBlock(block.id!)
+                                      setSelectedBlock(null)
                                     }
                                   }}
-                                  className="h-6 text-xs text-red-600 hover:text-red-700"
+                                  className="h-4 w-4 p-0 hover:bg-red-100 text-red-500 rounded"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-2.5 h-2.5" />
                                 </Button>
-
-                                {block.status !== 'cancelled' && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onUpdateStatus(block.id!, 'cancelled')
-                                    }}
-                                    className="h-6 text-xs text-gray-600"
-                                  >
-                                    取消
-                                  </Button>
-                                )}
                               </div>
                             )}
                           </div>
-                        )
-                      })
-                    )}
 
-                    {/* Hour divider line */}
-                    <div className="absolute bottom-0 left-0 right-4 border-b border-gray-100"></div>
-                  </div>
+                          {/* Parent info - only show for 'full' level */}
+                          {block.parentTitle && displayLevel === 'full' && (
+                            <Tooltip content={`${block.grandparentTitle ? `${block.grandparentTitle} › ` : ''}${block.parentTitle}`}>
+                              <div className="w-full text-xs text-gray-500 line-clamp-1 break-words">
+                                {block.grandparentTitle && `${block.grandparentTitle} › `}
+                                {block.parentTitle}
+                              </div>
+                            </Tooltip>
+                          )}
+
+                          {/* Comment - only show for 'full' level */}
+                          {block.comment && displayLevel === 'full' && (
+                            <Tooltip content={block.comment}>
+                              <div className="w-full text-xs text-gray-600 mt-1 italic line-clamp-2 break-words">
+                                {block.comment}
+                              </div>
+                            </Tooltip>
+                          )}
+
+                          {/* Status icon - only show for 'basic' and 'full' levels */}
+                          {getStatusIcon(block.status) && (displayLevel === 'basic' || displayLevel === 'full') && (
+                            <div className="mt-auto pt-1">
+                              {getStatusIcon(block.status)}
+                            </div>
+                          )}
+                          </div>
+                        )}
+
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </CardContent>

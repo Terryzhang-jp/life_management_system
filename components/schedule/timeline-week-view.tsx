@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Clock, Edit, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Edit, Trash2, Play, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock, WeekSchedule } from '@/lib/schedule-db'
+import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/schedule-layout'
+import { Tooltip } from '@/components/ui/tooltip'
 
 interface TimeSlotDropZoneProps {
   date: string
@@ -44,12 +46,47 @@ function TimeSlotDropZone({
     return blockStartHour === hour
   })
 
+  // Calculate layouts for blocks in this time slot
+  const blockLayouts = useMemo(() => {
+    // Get all blocks that overlap with this hour's time window
+    const hourStart = hour * 60
+    const hourEnd = (hour + 1) * 60
+
+    const overlappingBlocks = blocks.filter(block => {
+      const [startHour, startMin] = block.startTime.split(':').map(Number)
+      const [endHour, endMin] = block.endTime.split(':').map(Number)
+      const blockStart = startHour * 60 + startMin
+      const blockEnd = endHour * 60 + endMin
+
+      // Check if block overlaps with this hour
+      return blockStart < hourEnd && blockEnd > hourStart
+    })
+
+    return calculateBlockLayouts(overlappingBlocks)
+  }, [blocks, hour])
+
   const getStatusColor = (status: ScheduleBlock['status']) => {
     switch (status) {
-      case 'completed': return 'bg-green-500 hover:bg-green-600 text-white'
-      case 'in_progress': return 'bg-yellow-500 hover:bg-yellow-600 text-white'
-      case 'cancelled': return 'bg-gray-400 hover:bg-gray-500 text-white'
-      default: return 'bg-blue-500 hover:bg-blue-600 text-white'
+      case 'completed': return 'bg-white border-2 border-green-600 text-green-700 hover:bg-green-50'
+      case 'in_progress': return 'bg-white border-2 border-yellow-600 text-yellow-700 hover:bg-yellow-50'
+      case 'cancelled': return 'bg-white border-2 border-gray-500 text-gray-600 hover:bg-gray-50'
+      default: return 'bg-white border-2 border-gray-800 text-gray-800 hover:bg-gray-50'
+    }
+  }
+
+  // Calculate display level based on block height (copied from day-view)
+  const getDisplayLevel = (heightInPixels: number) => {
+    if (heightInPixels < 25) return 'minimal'      // < 25px: Only show colored block + tooltip
+    if (heightInPixels < 45) return 'title-only'   // < 45px: Title only (no time)
+    if (heightInPixels < 65) return 'basic'        // < 65px: Title + time
+    return 'full'                                  // >= 65px: All information
+  }
+
+  const getStatusIcon = (status: ScheduleBlock['status']) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="w-3 h-3" />
+      case 'in_progress': return <Play className="w-3 h-3" />
+      default: return null
     }
   }
 
@@ -88,58 +125,135 @@ function TimeSlotDropZone({
       }}
     >
       {/* Time slot blocks */}
-      {hourBlocks.map((block) => (
-        <div
-          key={block.id}
-          className={cn(
-            'absolute left-1 right-1 rounded px-2 py-1 cursor-pointer text-xs font-medium transition-all z-10',
-            getStatusColor(block.status),
-            'hover:shadow-md group'
-          )}
-          style={{
-            top: calculateBlockOffset(block),
-            height: calculateBlockHeight(block),
-            minHeight: '20px'
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            onBlockClick(block)
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex-1 min-w-0">
-              <div className="truncate font-medium">{block.taskTitle}</div>
-              <div className="text-xs opacity-90">
-                {block.startTime} - {block.endTime}
-              </div>
-            </div>
+      {hourBlocks.map((block) => {
+        const layout = blockLayouts.get(block.id!)
+        if (!layout) return null
 
-            {/* Action buttons - show on hover */}
-            <div className="hidden group-hover:flex gap-1 ml-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onBlockEdit(block)
-                }}
-                className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
-              >
-                <Edit className="w-3 h-3" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (confirm('确定删除这个时间安排吗？')) {
-                    onBlockDelete(block.id!)
-                  }
-                }}
-                className="p-1 hover:bg-white hover:bg-opacity-20 rounded"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
+        const blockHeight = calculateBlockHeight(block)
+        const displayLevel = getDisplayLevel(blockHeight)
+        const statusIcon = getStatusIcon(block.status)
+
+        return (
+          <div
+            key={block.id}
+            className={cn(
+              'absolute rounded-md px-1.5 py-1 cursor-pointer text-xs font-medium transition-all group overflow-hidden',
+              getStatusColor(block.status),
+              'hover:shadow-md hover:z-20'
+            )}
+            style={{
+              top: calculateBlockOffset(block),
+              height: blockHeight,
+              minHeight: '20px',
+              left: `${layout.left}%`,
+              width: `calc(${layout.width}% - 2px)`,
+              zIndex: 10,
+              maxWidth: `calc(${layout.width}% - 2px)`
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onBlockClick(block)
+            }}
+          >
+            {displayLevel === 'minimal' ? (
+              <Tooltip content={`${block.taskTitle} (${block.startTime} - ${block.endTime})`}>
+                <div className="w-full h-full" />
+              </Tooltip>
+            ) : (
+              <div className="flex flex-col h-full">
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex-1 min-w-0">
+                    {(displayLevel === 'basic' || displayLevel === 'full') && (
+                      <div className="text-xs text-gray-600 font-mono mb-0.5">
+                        {block.startTime.slice(0, 5)} - {block.endTime.slice(0, 5)}
+                      </div>
+                    )}
+
+                    <Tooltip content={block.taskTitle}>
+                      <div
+                        className={cn(
+                          'w-full font-medium text-gray-900 leading-tight break-words overflow-hidden',
+                          displayLevel === 'title-only' ? 'text-xs line-clamp-3' : 'text-xs line-clamp-2'
+                        )}
+                        style={{
+                          wordBreak: 'break-all',
+                          overflowWrap: 'anywhere',
+                          maxWidth: '100%'
+                        }}
+                      >
+                        {block.taskTitle}
+                      </div>
+                    </Tooltip>
+                  </div>
+
+                  {(displayLevel === 'basic' || displayLevel === 'full') && (
+                    <div className="flex gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onBlockEdit(block)
+                        }}
+                        className="p-0.5 hover:bg-blue-100 rounded"
+                      >
+                        <Edit className="w-2.5 h-2.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (confirm('确定删除这个时间安排吗？')) {
+                            onBlockDelete(block.id!)
+                          }
+                        }}
+                        className="p-0.5 hover:bg-red-100 text-red-500 rounded"
+                      >
+                        <Trash2 className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {block.parentTitle && displayLevel === 'full' && (
+                  <Tooltip content={`${block.grandparentTitle ? `${block.grandparentTitle} › ` : ''}${block.parentTitle}`}>
+                    <div
+                      className="w-full text-xs text-gray-500 line-clamp-1 break-words overflow-hidden"
+                      style={{
+                        wordBreak: 'break-all',
+                        overflowWrap: 'anywhere',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      {block.grandparentTitle && `${block.grandparentTitle} › `}
+                      {block.parentTitle}
+                    </div>
+                  </Tooltip>
+                )}
+
+                {block.comment && displayLevel === 'full' && (
+                  <Tooltip content={block.comment}>
+                    <div
+                      className="w-full text-xs text-gray-600 mt-1 italic line-clamp-2 break-words overflow-hidden"
+                      style={{
+                        wordBreak: 'break-all',
+                        overflowWrap: 'anywhere',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      {block.comment}
+                    </div>
+                  </Tooltip>
+                )}
+
+                {statusIcon && (displayLevel === 'basic' || displayLevel === 'full') && (
+                  <div className="mt-auto pt-1">
+                    {statusIcon}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
+
 
       {/* Drop zone indicator */}
       {isOver && (
@@ -181,12 +295,61 @@ export function TimelineWeekView({
   onSlotClick,
   className
 }: TimelineWeekViewProps) {
+  const [currentTime, setCurrentTime] = useState(new Date())
+  const timeGridRef = useRef<HTMLDivElement>(null)
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000) // Update every minute
+
+    return () => clearInterval(timer)
+  }, [])
+
   // Generate week dates
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(currentWeekStart)
     date.setDate(date.getDate() + i)
     return date.toISOString().split('T')[0]
   })
+
+  // Auto-scroll to current time when component mounts or time/week changes
+  useEffect(() => {
+    if (timeGridRef.current && weekDates.some(date => isDateToday(date))) {
+      const currentPosition = getCurrentTimePosition()
+      if (currentPosition !== null) {
+        // Add header height for scroll calculation since we're scrolling the entire container
+        const scrollTop = Math.max(0, currentPosition + 48 - 150) // +48 for header, -150 for padding
+        setTimeout(() => {
+          timeGridRef.current?.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          })
+        }, 100) // Small delay to ensure DOM is ready
+      }
+    }
+  }, [currentWeekStart, currentTime, weekDates]) // Trigger when week changes or time updates
+
+  // Check if a date is today
+  const isDateToday = (dateStr: string) => {
+    const today = new Date().toISOString().split('T')[0]
+    return dateStr === today
+  }
+
+  // Calculate current time position for timeline
+  const getCurrentTimePosition = () => {
+    const now = currentTime
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+
+    // Calculate position: base position (currentHour * 60px) + offset for minutes
+    // No header offset needed since this is positioned relative to the time slots grid
+    const basePosition = currentHour * 60 // 60px per hour (matches style={{ height: '60px' }})
+    const minuteOffset = (currentMinute / 60) * 60 // proportional offset within the hour
+
+    return basePosition + minuteOffset
+  }
 
   // Generate hours (0:00 - 23:00) - Full 24 hours
   const hours = Array.from({ length: 24 }, (_, i) => i)
@@ -249,7 +412,7 @@ export function TimelineWeekView({
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="flex">
+        <div ref={timeGridRef} className="flex max-h-[70vh] overflow-y-auto">
           {/* Time axis */}
           <div className="w-16 border-r border-gray-200 bg-gray-50">
             <div className="h-12 border-b border-gray-200"></div> {/* Header spacer */}
@@ -307,7 +470,36 @@ export function TimelineWeekView({
             </div>
 
             {/* Time slots grid */}
-            <div className="flex">
+            <div className="flex relative">
+              {/* Current Time Indicator - only show if today is in current week */}
+              {weekDates.some(date => isDateToday(date)) && (
+                <div
+                  className="absolute left-0 right-0 z-20 pointer-events-none"
+                  style={{ top: `${getCurrentTimePosition()}px` }}
+                >
+                  {/* Time label */}
+                  <div className="absolute left-2 -top-2.5 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-mono z-30">
+                    {currentTime.toLocaleTimeString('zh-CN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    })}
+                  </div>
+                  {/* Red line across all days */}
+                  <div className="h-0.5 bg-red-500 shadow-lg ml-16"></div>
+                  {/* Circle indicator at the beginning of today's column */}
+                  {weekDates.map((date, index) =>
+                    isDateToday(date) ? (
+                      <div
+                        key={`indicator-${date}`}
+                        className="absolute w-2 h-2 bg-red-500 rounded-full -top-1 z-30"
+                        style={{ left: `${64 + (index * (100 / 7))}%` }}
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+
               {weekDates.map((date) => (
                 <div key={date} className="flex-1 border-r border-gray-200 last:border-r-0">
                   {hours.map(hour => (

@@ -21,9 +21,7 @@ db.exec(`
     grandparent_title TEXT,
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(task_id, date, start_time)
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `)
 
