@@ -31,11 +31,12 @@ interface TimeSettingModalProps {
   onUpdate?: (blockId: number, scheduleBlock: Partial<ScheduleBlock>) => void
   mode?: 'create' | 'edit'
   existingBlock?: ScheduleBlock
-  task: Task | null
+  task?: Task | null  // Made optional for quick create
   date: string
   conflicts?: ScheduleBlock[]
   suggestedStartTime?: string
   suggestedEndTime?: string
+  quickCreate?: boolean  // New prop for quick create mode
 }
 
 interface QuickTimeOption {
@@ -61,11 +62,13 @@ export function TimeSettingModal({
   date,
   conflicts = [],
   suggestedStartTime = '09:00',
-  suggestedEndTime = '10:00'
+  suggestedEndTime = '10:00',
+  quickCreate = false
 }: TimeSettingModalProps) {
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [comment, setComment] = useState('')
+  const [quickTitle, setQuickTitle] = useState('')  // New state for quick create title
   const [checking, setChecking] = useState(false)
   const [currentConflicts, setCurrentConflicts] = useState<ScheduleBlock[]>([])
 
@@ -77,12 +80,14 @@ export function TimeSettingModal({
         setStartTime(existingBlock.startTime)
         setEndTime(existingBlock.endTime)
         setComment(existingBlock.comment || '')
+        setQuickTitle('')
         setCurrentConflicts([])
-      } else if (task) {
-        // Create mode with suggested times
+      } else {
+        // Create mode with suggested times (with or without task)
         setStartTime(suggestedStartTime)
         setEndTime(suggestedEndTime)
         setComment('')
+        setQuickTitle('')
         setCurrentConflicts([])
       }
     }
@@ -163,20 +168,38 @@ export function TimeSettingModal({
         comment: comment.trim() || undefined
       }
       onUpdate(existingBlock.id!, updates)
-    } else if (mode === 'create' && task) {
-      // Create mode - create new block
-      const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
-        taskId: task.id,
-        date,
-        startTime,
-        endTime,
-        comment: comment.trim() || undefined,
-        status: 'scheduled',
-        taskTitle: task.title,
-        parentTitle: task.level === 2 ? task.parentTitle : undefined,
-        grandparentTitle: task.level === 2 ? task.grandparentTitle : undefined
+    } else if (mode === 'create') {
+      if (quickCreate && !task) {
+        // Quick create mode - create standalone schedule without task
+        if (!quickTitle.trim()) return  // Title is required for quick create
+
+        const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
+          taskId: 0,  // Special ID for standalone schedules
+          date,
+          startTime,
+          endTime,
+          comment: comment.trim() || undefined,
+          status: 'scheduled',
+          taskTitle: quickTitle.trim(),  // Use the quick create title
+          parentTitle: undefined,
+          grandparentTitle: undefined
+        }
+        onConfirm(scheduleBlock)
+      } else if (task) {
+        // Create mode with task - create new block
+        const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
+          taskId: task.id,
+          date,
+          startTime,
+          endTime,
+          comment: comment.trim() || undefined,
+          status: 'scheduled',
+          taskTitle: task.title,
+          parentTitle: task.level === 2 ? task.parentTitle : undefined,
+          grandparentTitle: task.level === 2 ? task.grandparentTitle : undefined
+        }
+        onConfirm(scheduleBlock)
       }
-      onConfirm(scheduleBlock)
     }
 
     onClose()
@@ -187,8 +210,8 @@ export function TimeSettingModal({
     return null
   }
 
-  if (mode === 'create' && !task) {
-    console.log('TimeSettingModal create mode requires task')
+  if (mode === 'create' && !task && !quickCreate) {
+    console.log('TimeSettingModal create mode requires task or quickCreate flag')
     return null
   }
 
@@ -218,35 +241,49 @@ export function TimeSettingModal({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Task Info */}
-          <div className="p-3 bg-gray-50 rounded-lg">
-            {mode === 'edit' && existingBlock ? (
-              <div>
-                <div className="font-medium text-gray-900">{existingBlock.taskTitle}</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {existingBlock.grandparentTitle && existingBlock.parentTitle
-                    ? `${existingBlock.grandparentTitle} › ${existingBlock.parentTitle}`
-                    : existingBlock.parentTitle
-                  }
-                </div>
-              </div>
-            ) : task ? (
-              <div>
-                <div className="font-medium text-gray-900">{task.title}</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {task.level === 2 && task.grandparentTitle && task.parentTitle
-                    ? `${task.grandparentTitle} › ${task.parentTitle}`
-                    : task.parentTitle
-                  }
-                </div>
-                {task.deadline && (
-                  <div className="text-sm text-orange-600 mt-1">
-                    📅 截止: {new Date(task.deadline).toLocaleDateString()}
+          {/* Quick Create Title Input or Task Info */}
+          {quickCreate && !task ? (
+            <div className="space-y-2">
+              <Label htmlFor="quickTitle">任务名称 *</Label>
+              <Input
+                id="quickTitle"
+                placeholder="输入任务名称（如：开会、休息、学习）"
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.target.value)}
+                className="w-full"
+                autoFocus
+              />
+            </div>
+          ) : (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              {mode === 'edit' && existingBlock ? (
+                <div>
+                  <div className="font-medium text-gray-900">{existingBlock.taskTitle}</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {existingBlock.grandparentTitle && existingBlock.parentTitle
+                      ? `${existingBlock.grandparentTitle} › ${existingBlock.parentTitle}`
+                      : existingBlock.parentTitle
+                    }
                   </div>
-                )}
-              </div>
-            ) : null}
-          </div>
+                </div>
+              ) : task ? (
+                <div>
+                  <div className="font-medium text-gray-900">{task.title}</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {task.level === 2 && task.grandparentTitle && task.parentTitle
+                      ? `${task.grandparentTitle} › ${task.parentTitle}`
+                      : task.parentTitle
+                    }
+                  </div>
+                  {task.deadline && (
+                    <div className="text-sm text-orange-600 mt-1">
+                      📅 截止: {new Date(task.deadline).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {/* Date Info */}
           <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
@@ -363,7 +400,7 @@ export function TimeSettingModal({
             </Button>
             <Button
               onClick={handleConfirm}
-              disabled={!isValidTime || checking}
+              disabled={!isValidTime || checking || (quickCreate && !task && !quickTitle.trim())}
               className="flex-1"
             >
               {checking ? '检查中...' : (mode === 'edit' ? '确认更新' : '确认安排')}

@@ -12,6 +12,7 @@ import {
   useSensors
 } from '@dnd-kit/core'
 import { TaskPool } from '@/components/schedule/task-pool'
+import { RoutinePool } from '@/components/schedule/routine-pool'
 import { TimelineWeekView } from '@/components/schedule/timeline-week-view'
 import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
@@ -21,6 +22,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { WeekSchedule, ScheduleBlock } from '@/lib/schedule-db'
+import { cn } from '@/lib/utils'
 
 interface Task {
   id: number
@@ -51,6 +53,7 @@ export default function SchedulePage() {
   const [suggestedStartTime, setSuggestedStartTime] = useState<string>('')
   const [suggestedEndTime, setSuggestedEndTime] = useState<string>('')
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null)
+  const [quickCreateMode, setQuickCreateMode] = useState(false)  // New state for quick create
 
   // Configure drag and drop sensors
   const mouseSensor = useSensor(MouseSensor, {
@@ -141,6 +144,7 @@ export default function SchedulePage() {
       setSelectedDate(date)
       setSuggestedStartTime('')
       setSuggestedEndTime('')
+      setQuickCreateMode(false)  // Reset quick create mode
       setTimeModalOpen(true)
       // Don't clear draggedTask here - keep it for the modal
       return
@@ -159,6 +163,7 @@ export default function SchedulePage() {
       setSelectedDate(date)
       setSuggestedStartTime(startTime)
       setSuggestedEndTime(endTime)
+      setQuickCreateMode(false)  // Reset quick create mode
       setTimeModalOpen(true)
       // Don't clear draggedTask here - keep it for the modal
       return
@@ -277,6 +282,24 @@ export default function SchedulePage() {
     console.log('Editing block:', block)
     setEditingBlock(block)
     setSelectedDate(block.date)
+    setQuickCreateMode(false)
+    setDraggedTask(null)
+    setTimeModalOpen(true)
+  }
+
+  const handleSlotClick = (date: string, hour: number) => {
+    console.log('Quick create clicked:', date, hour)
+    // Set up for quick create mode
+    setQuickCreateMode(true)
+    setDraggedTask(null)
+    setEditingBlock(null)
+    setSelectedDate(date)
+    // Set suggested time based on clicked hour
+    const startTime = `${hour.toString().padStart(2, '0')}:00`
+    const endHour = hour + 1
+    const endTime = `${endHour.toString().padStart(2, '0')}:00`
+    setSuggestedStartTime(startTime)
+    setSuggestedEndTime(endTime)
     setTimeModalOpen(true)
   }
 
@@ -407,9 +430,12 @@ export default function SchedulePage() {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Panel - Task Pool */}
+          {/* Left Panel - Task Pool and Routine Pool */}
           <div className="lg:col-span-1">
-            <TaskPool className="sticky top-4" />
+            <div className="space-y-4 sticky top-4">
+              <TaskPool />
+              <RoutinePool />
+            </div>
           </div>
 
           {/* Right Panel - Timeline Week View */}
@@ -421,6 +447,7 @@ export default function SchedulePage() {
               onBlockClick={handleBlockClick}
               onBlockEdit={handleBlockEdit}
               onBlockDelete={handleDeleteBlock}
+              onSlotClick={handleSlotClick}
             />
           </div>
         </div>
@@ -428,14 +455,32 @@ export default function SchedulePage() {
         {/* Drag Overlay */}
         <DragOverlay>
           {draggedTask && (
-            <Card className="shadow-lg rotate-2 opacity-90">
+            <Card className={cn(
+              "shadow-lg rotate-2 opacity-90",
+              draggedTask.type === 'routine' && "border-green-300 bg-green-50"
+            )}>
               <CardContent className="p-3">
-                <div className="font-medium text-sm">{draggedTask.title}</div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {draggedTask.level === 2 && draggedTask.grandparentTitle && draggedTask.parentTitle
-                    ? `${draggedTask.grandparentTitle} › ${draggedTask.parentTitle}`
-                    : draggedTask.parentTitle
-                  }
+                <div className="flex items-center gap-2">
+                  {draggedTask.type === 'routine' && (
+                    <span className="text-green-600">🔄</span>
+                  )}
+                  <div>
+                    <div className={cn(
+                      "font-medium text-sm",
+                      draggedTask.type === 'routine' ? "text-green-800" : ""
+                    )}>
+                      {draggedTask.title}
+                    </div>
+                    <div className={cn(
+                      "text-xs mt-1",
+                      draggedTask.type === 'routine' ? "text-green-600" : "text-gray-600"
+                    )}>
+                      {draggedTask.level === 2 && draggedTask.grandparentTitle && draggedTask.parentTitle
+                        ? `${draggedTask.grandparentTitle} › ${draggedTask.parentTitle}`
+                        : draggedTask.parentTitle
+                      }
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -449,6 +494,7 @@ export default function SchedulePage() {
             setTimeModalOpen(false)
             setDraggedTask(null) // Clear dragged task when modal closes
             setEditingBlock(null) // Clear editing block when modal closes
+            setQuickCreateMode(false) // Reset quick create mode
           }}
           onConfirm={handleTimeConfirm}
           onUpdate={handleTimeUpdate}
@@ -458,6 +504,7 @@ export default function SchedulePage() {
           date={selectedDate}
           suggestedStartTime={suggestedStartTime}
           suggestedEndTime={suggestedEndTime}
+          quickCreate={quickCreateMode}
         />
 
         {/* Day View Modal */}

@@ -380,7 +380,7 @@ const tasksDbManager = new TasksDatabaseManager()
 export function getAllSchedulableTasks() {
   const db = tasksDbManager.getDb()
 
-  // Get all level 2 tasks (sub-sub-tasks)
+  // Get all level 2 tasks (sub-sub-tasks), excluding routines
   const level2Tasks = db.prepare(`
     SELECT
       t.id,
@@ -396,11 +396,15 @@ export function getAllSchedulableTasks() {
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     LEFT JOIN tasks gp ON p.parent_id = gp.id
-    WHERE t.level = 2
-    ORDER BY t.priority, t.created_at
+    WHERE t.level = 2 AND t.type != 'routine'
+    ORDER BY
+      CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
+      t.deadline ASC,
+      t.priority,
+      t.created_at
   `).all()
 
-  // Get level 1 tasks that don't have children
+  // Get level 1 tasks that don't have children, excluding routines
   const level1TasksWithoutChildren = db.prepare(`
     SELECT
       t.id,
@@ -416,10 +420,15 @@ export function getAllSchedulableTasks() {
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     WHERE t.level = 1
+      AND t.type != 'routine'
       AND NOT EXISTS (
         SELECT 1 FROM tasks child WHERE child.parent_id = t.id
       )
-    ORDER BY t.priority, t.created_at
+    ORDER BY
+      CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
+      t.deadline ASC,
+      t.priority,
+      t.created_at
   `).all()
 
   const allTasks = [...level2Tasks, ...level1TasksWithoutChildren]
@@ -441,7 +450,258 @@ export function getAllSchedulableTasks() {
     return !status?.isCompleted
   })
 
+  // Sort by deadline first, then priority
+  schedulableTasks.sort((a, b) => {
+    // Deadline priority: tasks with deadline come first
+    if (a.deadline && !b.deadline) return -1
+    if (!a.deadline && b.deadline) return 1
+
+    // Both have deadlines: sort by deadline
+    if (a.deadline && b.deadline) {
+      const deadlineComparison = a.deadline.localeCompare(b.deadline)
+      if (deadlineComparison !== 0) return deadlineComparison
+    }
+
+    // Same deadline status: sort by priority
+    const priorityA = a.priority === 999 ? Infinity : (a.priority || Infinity)
+    const priorityB = b.priority === 999 ? Infinity : (b.priority || Infinity)
+
+    return priorityA - priorityB
+  })
+
   return schedulableTasks
+}
+
+// Get schedulable routine tasks
+export function getSchedulableRoutines() {
+  const db = tasksDbManager.getDb()
+
+  // Get all routine tasks (level 2 and level 1 without children, but NOT level 0)
+  const routineLevel2Tasks = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      p.parent_id as grandparentId,
+      gp.title as grandparentTitle
+    FROM tasks t
+    INNER JOIN tasks p ON t.parent_id = p.id
+    INNER JOIN tasks gp ON p.parent_id = gp.id AND gp.type = 'routine'
+    WHERE t.level = 2 AND t.type = 'routine'
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  // Get orphaned level 2 routine tasks (parent or grandparent not routine/missing)
+  const orphanedRoutineLevel2Tasks = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      NULL as parentId,
+      NULL as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    WHERE t.level = 2
+      AND t.type = 'routine'
+      AND (
+        t.parent_id IS NULL
+        OR NOT EXISTS (SELECT 1 FROM tasks p WHERE p.id = t.parent_id)
+        OR NOT EXISTS (
+          SELECT 1 FROM tasks p
+          INNER JOIN tasks gp ON p.parent_id = gp.id AND gp.type = 'routine'
+          WHERE p.id = t.parent_id
+        )
+      )
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  const routineLevel1TasksWithoutChildren = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    INNER JOIN tasks p ON t.parent_id = p.id AND p.type = 'routine'
+    WHERE t.level = 1
+      AND t.type = 'routine'
+      AND NOT EXISTS (
+        SELECT 1 FROM tasks child WHERE child.parent_id = t.id
+      )
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  // Get level 1 routine tasks that have no valid routine parent (orphaned tasks)
+  const orphanedRoutineLevel1Tasks = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      NULL as parentId,
+      NULL as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    WHERE t.level = 1
+      AND t.type = 'routine'
+      AND NOT EXISTS (
+        SELECT 1 FROM tasks child WHERE child.parent_id = t.id
+      )
+      AND (t.parent_id IS NULL OR NOT EXISTS (
+        SELECT 1 FROM tasks p WHERE p.id = t.parent_id AND p.type = 'routine'
+      ))
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  // Also get level 0 routine tasks that don't have children (main routine tasks)
+  const routineLevel0TasksWithoutChildren = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      NULL as parentId,
+      NULL as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    WHERE t.level = 0
+      AND t.type = 'routine'
+      AND NOT EXISTS (
+        SELECT 1 FROM tasks child WHERE child.parent_id = t.id
+      )
+    ORDER BY t.priority, t.created_at
+  `).all()
+
+  const allRoutines = [...routineLevel2Tasks, ...orphanedRoutineLevel2Tasks, ...routineLevel1TasksWithoutChildren, ...orphanedRoutineLevel1Tasks, ...routineLevel0TasksWithoutChildren]
+
+  if (allRoutines.length === 0) {
+    return []
+  }
+
+  // Filter out completed tasks using completed-tasks-db
+  const completedTasksDb = require('./completed-tasks-db').default
+
+  // Get completion status for all tasks
+  const taskIds = allRoutines.map((task: any) => task.id)
+  const completionStatusMap = completedTasksDb.getTasksCompletionStatus(taskIds)
+
+  // Filter out completed tasks
+  const schedulableRoutines = allRoutines.filter((task: any) => {
+    const status = completionStatusMap.get(task.id)
+    return !status?.isCompleted
+  })
+
+  // Sort by priority
+  schedulableRoutines.sort((a: any, b: any) => {
+    const priorityA = a.priority === 999 ? Infinity : (a.priority || Infinity)
+    const priorityB = b.priority === 999 ? Infinity : (b.priority || Infinity)
+    return priorityA - priorityB
+  })
+
+  return schedulableRoutines
+}
+
+// Get tasks due within next N days
+export function getTasksDueSoon(days: number = 2) {
+  const db = tasksDbManager.getDb()
+
+  // Calculate the target date (today + N days)
+  const today = new Date()
+  const targetDate = new Date(today)
+  targetDate.setDate(today.getDate() + days)
+
+  const todayStr = today.toISOString().split('T')[0]
+  const targetDateStr = targetDate.toISOString().split('T')[0]
+
+  // Get all level 2 tasks due soon
+  const level2TasksDue = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      p.parent_id as grandparentId,
+      gp.title as grandparentTitle
+    FROM tasks t
+    LEFT JOIN tasks p ON t.parent_id = p.id
+    LEFT JOIN tasks gp ON p.parent_id = gp.id
+    WHERE t.level = 2
+      AND t.deadline IS NOT NULL
+      AND t.deadline >= ?
+      AND t.deadline <= ?
+    ORDER BY t.deadline ASC, t.priority
+  `).all(todayStr, targetDateStr)
+
+  // Get level 1 tasks without children that are due soon
+  const level1TasksDue = db.prepare(`
+    SELECT
+      t.id,
+      t.title,
+      t.type,
+      t.level,
+      t.priority,
+      t.deadline,
+      t.parent_id as parentId,
+      p.title as parentTitle,
+      NULL as grandparentId,
+      NULL as grandparentTitle
+    FROM tasks t
+    LEFT JOIN tasks p ON t.parent_id = p.id
+    WHERE t.level = 1
+      AND t.deadline IS NOT NULL
+      AND t.deadline >= ?
+      AND t.deadline <= ?
+      AND NOT EXISTS (
+        SELECT 1 FROM tasks child WHERE child.parent_id = t.id
+      )
+    ORDER BY t.deadline ASC, t.priority
+  `).all(todayStr, targetDateStr)
+
+  const allDueTasks = [...level2TasksDue, ...level1TasksDue]
+
+  if (allDueTasks.length === 0) {
+    return []
+  }
+
+  // Filter out completed tasks
+  const completedTasksDb = require('./completed-tasks-db').default
+  const taskIds = allDueTasks.map(task => task.id)
+  const completionStatusMap = completedTasksDb.getTasksCompletionStatus(taskIds)
+
+  const dueTasks = allDueTasks.filter(task => {
+    const status = completionStatusMap.get(task.id)
+    return !status?.isCompleted
+  })
+
+  // Sort by deadline
+  dueTasks.sort((a, b) => a.deadline.localeCompare(b.deadline))
+
+  return dueTasks
 }
 
 export default tasksDbManager

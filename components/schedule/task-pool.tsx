@@ -7,6 +7,42 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
+// Utility functions for date handling
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return null
+  const date = new Date(dateStr)
+  const today = new Date()
+  const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return `${date.getMonth() + 1}/${date.getDate()} (今天)`
+  if (diffDays === 1) return `${date.getMonth() + 1}/${date.getDate()} (明天)`
+  if (diffDays > 0) return `${date.getMonth() + 1}/${date.getDate()} (${diffDays}天后)`
+  return `${date.getMonth() + 1}/${date.getDate()} (已过期)`
+}
+
+const getDueDateUrgency = (dateStr?: string) => {
+  if (!dateStr) return 'none'
+  const date = new Date(dateStr)
+  const today = new Date()
+  const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) return 'overdue'
+  if (diffDays === 0) return 'today'
+  if (diffDays === 1) return 'tomorrow'
+  if (diffDays <= 2) return 'soon'
+  return 'normal'
+}
+
+const getUrgencyColor = (urgency: string) => {
+  switch (urgency) {
+    case 'overdue': return 'text-red-600 bg-red-50 border-red-200'
+    case 'today': return 'text-orange-600 bg-orange-50 border-orange-200'
+    case 'tomorrow': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
+    case 'soon': return 'text-blue-600 bg-blue-50 border-blue-200'
+    default: return 'text-gray-600 bg-gray-50 border-gray-200'
+  }
+}
+
 interface Task {
   id: number
   title: string
@@ -59,17 +95,20 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
     }
   }
 
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return null
-    const date = new Date(dateStr)
-    const today = new Date()
-    const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  // Get urgency level for this task's deadline
+  const urgency = task.deadline ? getDueDateUrgency(task.deadline) : 'none'
 
-    if (diffDays === 0) return `${date.getMonth() + 1}/${date.getDate()} (今天)`
-    if (diffDays === 1) return `${date.getMonth() + 1}/${date.getDate()} (明天)`
-    if (diffDays > 0) return `${date.getMonth() + 1}/${date.getDate()} (${diffDays}天后)`
-    return `${date.getMonth() + 1}/${date.getDate()} (已过期)`
+  // Determine background color based on urgency
+  const getTaskBackgroundClass = () => {
+    switch (urgency) {
+      case 'overdue': return 'bg-red-50 border-red-300 hover:bg-red-100'
+      case 'today': return 'bg-orange-50 border-orange-300 hover:bg-orange-100'
+      case 'tomorrow': return 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100'
+      case 'soon': return 'bg-blue-50 border-blue-300 hover:bg-blue-100'
+      default: return isSchedulable ? 'hover:bg-gray-50 border-gray-200' : 'bg-gray-50 border-gray-100'
+    }
   }
+
 
   return (
     <div
@@ -78,7 +117,7 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
       className={cn(
         'flex items-center gap-2 p-2 rounded border transition-all',
         isSchedulable
-          ? 'cursor-move hover:bg-gray-50 border-gray-200'
+          ? `cursor-move ${getTaskBackgroundClass()}`
           : 'cursor-not-allowed bg-gray-50 border-gray-100 opacity-60',
         isDragging && 'opacity-50 z-50'
       )}
@@ -106,7 +145,17 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
         </div>
 
         {task.deadline && (
-          <div className="text-xs text-gray-500">
+          <div className={cn(
+            "text-xs font-medium",
+            urgency === 'overdue' && "text-red-600",
+            urgency === 'today' && "text-orange-600",
+            urgency === 'tomorrow' && "text-yellow-700",
+            urgency === 'soon' && "text-blue-600",
+            urgency === 'normal' && "text-gray-500"
+          )}>
+            {urgency === 'overdue' && '⚠️ '}
+            {urgency === 'today' && '🔥 '}
+            {urgency === 'tomorrow' && '⏰ '}
             📅 {formatDate(task.deadline)}
           </div>
         )}
@@ -132,6 +181,8 @@ export function TaskPool({ className }: TaskPoolProps) {
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [dueTasks, setDueTasks] = useState<Task[]>([])
+  const [dueTasksLoading, setDueTasksLoading] = useState(true)
 
   // Calculate dynamic height based on expanded groups and content
   const expandedCount = expandedGroups.size
@@ -143,7 +194,30 @@ export function TaskPool({ className }: TaskPoolProps) {
 
   useEffect(() => {
     fetchSchedulableTasks()
+    fetchDueTasks()
   }, [])
+
+  const fetchDueTasks = async () => {
+    try {
+      const response = await fetch('/api/tasks/due-soon?days=2')
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+
+      if (Array.isArray(data)) {
+        setDueTasks(data)
+      } else {
+        console.error('Due tasks API did not return an array:', data)
+        setDueTasks([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch due tasks:', error)
+      setDueTasks([])
+    } finally {
+      setDueTasksLoading(false)
+    }
+  }
 
   useEffect(() => {
     // Group tasks by main task (grandparent for level 2, parent for level 1)
@@ -261,11 +335,56 @@ export function TaskPool({ className }: TaskPoolProps) {
           <p className="text-sm text-gray-500">拖拽子子任务到日程中</p>
         </div>
 
+        {/* Due Soon Alert */}
+        {!dueTasksLoading && dueTasks.length > 0 && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-200 rounded-lg shadow-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-xl">⚠️</span>
+              <h4 className="font-semibold text-lg text-orange-800">近期到期任务</h4>
+              <span className="text-sm text-orange-700 bg-orange-100 px-3 py-1 rounded-full font-medium">
+                {dueTasks.length}个
+              </span>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {dueTasks.map((task) => {
+                const urgency = getDueDateUrgency(task.deadline)
+                return (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border text-sm shadow-sm",
+                      getUrgencyColor(urgency)
+                    )}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-semibold">{task.title}</div>
+                      <div className="text-xs opacity-75 mt-1">
+                        {task.level === 2 && task.grandparentTitle && task.parentTitle
+                          ? `${task.grandparentTitle} › ${task.parentTitle}`
+                          : task.parentTitle
+                        }
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold ml-3">
+                      {formatDate(task.deadline)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className={cn(
           "space-y-2 overflow-y-auto transition-all duration-300 ease-in-out",
-          // Dynamic height based on content
-          totalChildrenInExpanded > 10 ? "max-h-[80vh]" :
-          hasExpandedGroups ? "max-h-[70vh]" : "max-h-[50vh]"
+          // Dynamic height based on content and due tasks alert
+          dueTasks.length > 0 ? (
+            totalChildrenInExpanded > 10 ? "max-h-[65vh]" :
+            hasExpandedGroups ? "max-h-[55vh]" : "max-h-[40vh]"
+          ) : (
+            totalChildrenInExpanded > 10 ? "max-h-[80vh]" :
+            hasExpandedGroups ? "max-h-[70vh]" : "max-h-[50vh]"
+          )
         )}>
           {taskGroups.length === 0 ? (
             <div className="text-center py-8 text-gray-500">

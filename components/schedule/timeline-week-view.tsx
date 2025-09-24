@@ -16,6 +16,7 @@ interface TimeSlotDropZoneProps {
   onBlockClick: (block: ScheduleBlock) => void
   onBlockEdit: (block: ScheduleBlock) => void
   onBlockDelete: (blockId: number) => void
+  onSlotClick?: (date: string, hour: number) => void
 }
 
 function TimeSlotDropZone({
@@ -24,7 +25,8 @@ function TimeSlotDropZone({
   blocks = [],
   onBlockClick,
   onBlockEdit,
-  onBlockDelete
+  onBlockDelete,
+  onSlotClick
 }: TimeSlotDropZoneProps) {
   const slotId = `${date}-${hour}`
   const { isOver, setNodeRef } = useDroppable({
@@ -72,11 +74,18 @@ function TimeSlotDropZone({
     <div
       ref={setNodeRef}
       className={cn(
-        'relative h-15 border-b border-gray-100 transition-colors',
+        'relative h-15 border-b border-gray-100 transition-colors cursor-pointer',
         isSleepTime && 'bg-gray-50',
-        isOver && 'bg-blue-50 border-blue-300'
+        isOver && 'bg-blue-50 border-blue-300',
+        'hover:bg-gray-50'
       )}
       style={{ height: '60px' }} // 60px per hour
+      onClick={(e) => {
+        // Only trigger if clicking on empty space, not on existing blocks
+        if (e.target === e.currentTarget && onSlotClick) {
+          onSlotClick(date, hour)
+        }
+      }}
     >
       {/* Time slot blocks */}
       {hourBlocks.map((block) => (
@@ -158,6 +167,7 @@ interface TimelineWeekViewProps {
   onBlockClick: (block: ScheduleBlock) => void
   onBlockEdit: (block: ScheduleBlock) => void
   onBlockDelete: (blockId: number) => void
+  onSlotClick?: (date: string, hour: number) => void
   className?: string
 }
 
@@ -168,6 +178,7 @@ export function TimelineWeekView({
   onBlockClick,
   onBlockEdit,
   onBlockDelete,
+  onSlotClick,
   className
 }: TimelineWeekViewProps) {
   // Generate week dates
@@ -308,6 +319,7 @@ export function TimelineWeekView({
                       onBlockClick={onBlockClick}
                       onBlockEdit={onBlockEdit}
                       onBlockDelete={onBlockDelete}
+                      onSlotClick={onSlotClick}
                     />
                   ))}
                 </div>
