@@ -18,10 +18,19 @@ interface Task {
   level: number
   priority?: number
   deadline?: string
+  categoryId?: number
   parentId?: number
   parentTitle?: string
   grandparentId?: number
   grandparentTitle?: string
+}
+
+interface TaskCategory {
+  id?: number
+  name: string
+  color: string
+  icon?: string
+  order?: number
 }
 
 interface TimeSettingModalProps {
@@ -33,6 +42,7 @@ interface TimeSettingModalProps {
   existingBlock?: ScheduleBlock
   task?: Task | null  // Made optional for quick create
   date: string
+  categories?: TaskCategory[]
   conflicts?: ScheduleBlock[]
   suggestedStartTime?: string
   suggestedEndTime?: string
@@ -60,6 +70,7 @@ export function TimeSettingModal({
   existingBlock,
   task,
   date,
+  categories = [],
   conflicts = [],
   suggestedStartTime = '09:00',
   suggestedEndTime = '10:00',
@@ -69,6 +80,7 @@ export function TimeSettingModal({
   const [endTime, setEndTime] = useState('10:00')
   const [comment, setComment] = useState('')
   const [quickTitle, setQuickTitle] = useState('')  // New state for quick create title
+  const [categoryId, setCategoryId] = useState<number | null>(null)
   const [checking, setChecking] = useState(false)
   const [currentConflicts, setCurrentConflicts] = useState<ScheduleBlock[]>([])
 
@@ -80,6 +92,7 @@ export function TimeSettingModal({
         setStartTime(existingBlock.startTime)
         setEndTime(existingBlock.endTime)
         setComment(existingBlock.comment || '')
+        setCategoryId(existingBlock.categoryId || null)
         setQuickTitle('')
         setCurrentConflicts([])
       } else {
@@ -87,6 +100,7 @@ export function TimeSettingModal({
         setStartTime(suggestedStartTime)
         setEndTime(suggestedEndTime)
         setComment('')
+        setCategoryId(task?.categoryId || null)  // Use task's category if available
         setQuickTitle('')
         setCurrentConflicts([])
       }
@@ -159,13 +173,19 @@ export function TimeSettingModal({
   const handleConfirm = () => {
     if (!startTime || !endTime || startTime >= endTime) return
 
+    // Get category info
+    const category = categoryId ? categories.find(cat => cat.id === categoryId) : null
+
     if (mode === 'edit' && existingBlock && onUpdate) {
       // Edit mode - update existing block
       const updates: Partial<ScheduleBlock> = {
         date,
         startTime,
         endTime,
-        comment: comment.trim() || undefined
+        comment: comment.trim() || undefined,
+        categoryId,
+        categoryName: category?.name || null,
+        categoryColor: category?.color || null
       }
       onUpdate(existingBlock.id!, updates)
     } else if (mode === 'create') {
@@ -182,7 +202,10 @@ export function TimeSettingModal({
           status: 'scheduled',
           taskTitle: quickTitle.trim(),  // Use the quick create title
           parentTitle: undefined,
-          grandparentTitle: undefined
+          grandparentTitle: undefined,
+          categoryId,
+          categoryName: category?.name || null,
+          categoryColor: category?.color || null
         }
         onConfirm(scheduleBlock)
       } else if (task) {
@@ -196,7 +219,10 @@ export function TimeSettingModal({
           status: 'scheduled',
           taskTitle: task.title,
           parentTitle: task.parentTitle || undefined,
-          grandparentTitle: task.grandparentTitle || undefined
+          grandparentTitle: task.grandparentTitle || undefined,
+          categoryId,
+          categoryName: category?.name || null,
+          categoryColor: category?.color || null
         }
         onConfirm(scheduleBlock)
       }
@@ -354,6 +380,23 @@ export function TimeSettingModal({
                   </Button>
                 ))}
               </div>
+            </div>
+
+            {/* Category Selection */}
+            <div>
+              <Label className="text-sm font-medium">分类</Label>
+              <select
+                value={categoryId || ''}
+                onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full mt-1 text-sm border border-gray-300 rounded-md px-3 py-2 bg-white focus:border-blue-500 focus:outline-none"
+              >
+                <option value="">无分类</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

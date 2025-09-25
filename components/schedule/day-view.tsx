@@ -6,6 +6,14 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Edit, Trash2, Play, CheckCircle, Clock3, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock } from '@/lib/schedule-db'
+
+interface TaskCategory {
+  id?: number
+  name: string
+  color: string
+  icon?: string
+  order?: number
+}
 import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/schedule-layout'
 import { Tooltip } from '@/components/ui/tooltip'
 
@@ -14,7 +22,9 @@ interface DayViewProps {
   onClose: () => void
   date: string
   blocks: ScheduleBlock[]
+  categories: TaskCategory[]
   onUpdateStatus: (blockId: number, status: ScheduleBlock['status']) => void
+  onUpdateCategory: (blockId: number, categoryId: number | null) => void
   onEditBlock: (block: ScheduleBlock) => void
   onDeleteBlock: (blockId: number) => void
 }
@@ -24,7 +34,9 @@ export function DayView({
   onClose,
   date,
   blocks = [],
+  categories = [],
   onUpdateStatus,
+  onUpdateCategory,
   onEditBlock,
   onDeleteBlock
 }: DayViewProps) {
@@ -107,6 +119,20 @@ export function DayView({
       case 'scheduled': return <Circle className="w-4 h-4" />
       default: return null
     }
+  }
+
+  const getBlockCategory = (block: ScheduleBlock) => {
+    if (!block.categoryId) return null
+    // If block already has category info, use it
+    if (block.categoryName && block.categoryColor) {
+      return {
+        id: block.categoryId,
+        name: block.categoryName,
+        color: block.categoryColor
+      }
+    }
+    // Otherwise, find from categories array
+    return categories.find(category => category.id === block.categoryId)
   }
 
   // Generate 24 hour time slots
@@ -319,16 +345,28 @@ export function DayView({
                                 </div>
                               )}
 
-                              {/* Task title - always show except for 'minimal' */}
+                              {/* Task title with category badge - always show except for 'minimal' */}
                               {displayLevel !== 'minimal' && (
-                                <Tooltip content={block.taskTitle}>
-                                  <div className={cn(
-                                    "w-full font-medium text-gray-900 leading-tight break-words",
-                                    displayLevel === 'title-only' ? "text-xs line-clamp-3" : "text-sm line-clamp-2"
-                                  )}>
-                                    {block.taskTitle}
-                                  </div>
-                                </Tooltip>
+                                <div className="flex items-start gap-1 w-full">
+                                  <Tooltip content={block.taskTitle}>
+                                    <div className={cn(
+                                      "flex-1 font-medium text-gray-900 leading-tight break-words",
+                                      displayLevel === 'title-only' ? "text-xs line-clamp-3" : "text-sm line-clamp-2"
+                                    )}>
+                                      {block.taskTitle}
+                                    </div>
+                                  </Tooltip>
+                                  {/* Category badge for all levels except minimal */}
+                                  {displayLevel !== 'minimal' && getBlockCategory(block) && (
+                                    <span
+                                      className="text-xs px-1 py-0.5 rounded text-white font-medium flex-shrink-0"
+                                      style={{ backgroundColor: getBlockCategory(block)?.color }}
+                                      title={`分类: ${getBlockCategory(block)?.name}`}
+                                    >
+                                      {getBlockCategory(block)?.name}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
 
@@ -364,14 +402,40 @@ export function DayView({
                             )}
                           </div>
 
-                          {/* Parent info - only show for 'full' level */}
-                          {block.parentTitle && displayLevel === 'full' && (
-                            <Tooltip content={`${block.grandparentTitle ? `${block.grandparentTitle} › ` : ''}${block.parentTitle}`}>
-                              <div className="w-full text-xs text-gray-500 line-clamp-1 break-words">
-                                {block.grandparentTitle && `${block.grandparentTitle} › `}
-                                {block.parentTitle}
+                          {/* Parent info and Category selector - only show for 'full' level */}
+                          {displayLevel === 'full' && (
+                            <div className="space-y-1">
+                              {block.parentTitle && (
+                                <Tooltip content={`${block.grandparentTitle ? `${block.grandparentTitle} › ` : ''}${block.parentTitle}`}>
+                                  <div className="w-full text-xs text-gray-500 line-clamp-1 break-words">
+                                    {block.grandparentTitle && `${block.grandparentTitle} › `}
+                                    {block.parentTitle}
+                                  </div>
+                                </Tooltip>
+                              )}
+
+                              {/* Category selector */}
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500 flex-shrink-0">分类:</span>
+                                <select
+                                  value={block.categoryId || ''}
+                                  onChange={(e) => {
+                                    e.stopPropagation()
+                                    const categoryId = e.target.value ? Number(e.target.value) : null
+                                    onUpdateCategory(block.id!, categoryId)
+                                  }}
+                                  className="text-xs border-0 border-b border-gray-200 bg-transparent px-0 py-0 focus:border-gray-400 focus:outline-none w-16"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="">无</option>
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
-                            </Tooltip>
+                            </div>
                           )}
 
                           {/* Comment - only show for 'full' level */}

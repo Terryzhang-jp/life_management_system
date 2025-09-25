@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -54,6 +54,13 @@ interface Task {
   parentTitle?: string
   grandparentId?: number
   grandparentTitle?: string
+  categoryId?: number
+}
+
+interface TaskCategory {
+  id: number
+  name: string
+  color: string
 }
 
 interface TaskGroup {
@@ -64,9 +71,10 @@ interface TaskGroup {
 interface DraggableTaskProps {
   task: Task
   isSchedulable: boolean
+  categories: TaskCategory[]
 }
 
-function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
+function DraggableTask({ task, isSchedulable, categories }: DraggableTaskProps) {
   const {
     attributes,
     listeners,
@@ -97,6 +105,11 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
 
   // Get urgency level for this task's deadline
   const urgency = task.deadline ? getDueDateUrgency(task.deadline) : 'none'
+
+  // Get category information
+  const taskCategory = task.categoryId
+    ? categories.find(category => category.id === task.categoryId)
+    : null
 
   // Determine background color based on urgency
   const getTaskBackgroundClass = () => {
@@ -142,6 +155,15 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
               {task.priority}
             </Badge>
           )}
+
+          {taskCategory && (
+            <Badge
+              className="text-xs text-white font-medium"
+              style={{ backgroundColor: taskCategory.color }}
+            >
+              {taskCategory.name}
+            </Badge>
+          )}
         </div>
 
         {task.deadline && (
@@ -174,9 +196,12 @@ function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
 
 interface TaskPoolProps {
   className?: string
+  categories?: TaskCategory[]
+  selectedCategoryFilter?: number | null
+  onCategoryFilterChange?: (categoryId: number | null) => void
 }
 
-export function TaskPool({ className }: TaskPoolProps) {
+export function TaskPool({ className, categories = [], selectedCategoryFilter, onCategoryFilterChange }: TaskPoolProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set())
@@ -191,6 +216,23 @@ export function TaskPool({ className }: TaskPoolProps) {
     const group = taskGroups.find(g => g.main.id === groupId)
     return sum + (group?.children.length || 0)
   }, 0)
+
+  // Filter tasks based on selected category
+  const filteredTaskGroups = useMemo(() => {
+    if (!selectedCategoryFilter) return taskGroups
+
+    return taskGroups
+      .map(group => ({
+        ...group,
+        children: group.children.filter(task => task.categoryId === selectedCategoryFilter)
+      }))
+      .filter(group => group.children.length > 0)
+  }, [taskGroups, selectedCategoryFilter])
+
+  const filteredDueTasks = useMemo(() => {
+    if (!selectedCategoryFilter) return dueTasks
+    return dueTasks.filter(task => task.categoryId === selectedCategoryFilter)
+  }, [dueTasks, selectedCategoryFilter])
 
   useEffect(() => {
     fetchSchedulableTasks()
@@ -331,22 +373,48 @@ export function TaskPool({ className }: TaskPoolProps) {
     <Card className={className}>
       <CardContent className="p-4">
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">任务池</h3>
-          <p className="text-sm text-gray-500">拖拽子子任务到日程中</p>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">任务池</h3>
+              <p className="text-sm text-gray-500">拖拽子子任务到日程中</p>
+            </div>
+
+            {/* Category Filter */}
+            {categories.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600">分类筛选:</label>
+                <select
+                  value={selectedCategoryFilter || ''}
+                  onChange={(e) => {
+                    const value = e.target.value ? Number(e.target.value) : null
+                    onCategoryFilterChange?.(value)
+                  }}
+                  className="px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">全部</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Due Soon Alert */}
-        {!dueTasksLoading && dueTasks.length > 0 && (
+        {!dueTasksLoading && filteredDueTasks.length > 0 && (
           <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-200 rounded-lg shadow-sm">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl">⚠️</span>
               <h4 className="font-semibold text-lg text-orange-800">近期到期任务</h4>
               <span className="text-sm text-orange-700 bg-orange-100 px-3 py-1 rounded-full font-medium">
-                {dueTasks.length}个
+                {filteredDueTasks.length}个
               </span>
             </div>
             <div className="space-y-2 max-h-40 overflow-y-auto">
-              {dueTasks.map((task) => {
+              {filteredDueTasks.map((task) => {
                 const urgency = getDueDateUrgency(task.deadline)
                 return (
                   <div
@@ -378,7 +446,7 @@ export function TaskPool({ className }: TaskPoolProps) {
         <div className={cn(
           "space-y-2 overflow-y-auto transition-all duration-300 ease-in-out",
           // Dynamic height based on content and due tasks alert
-          dueTasks.length > 0 ? (
+          filteredDueTasks.length > 0 ? (
             totalChildrenInExpanded > 10 ? "max-h-[65vh]" :
             hasExpandedGroups ? "max-h-[55vh]" : "max-h-[40vh]"
           ) : (
@@ -386,15 +454,17 @@ export function TaskPool({ className }: TaskPoolProps) {
             hasExpandedGroups ? "max-h-[70vh]" : "max-h-[50vh]"
           )
         )}>
-          {taskGroups.length === 0 ? (
+          {filteredTaskGroups.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <div className="text-sm">暂无可调度任务</div>
+              <div className="text-sm">
+                {selectedCategoryFilter ? '该分类下暂无可调度任务' : '暂无可调度任务'}
+              </div>
               <div className="text-xs mt-1">
                 只有子子任务和无子任务的子任务可以调度
               </div>
             </div>
           ) : (
-            taskGroups.map((group) => {
+            filteredTaskGroups.map((group) => {
               const isExpanded = expandedGroups.has(group.main.id)
 
               return (
@@ -425,6 +495,7 @@ export function TaskPool({ className }: TaskPoolProps) {
                           key={task.id}
                           task={task}
                           isSchedulable={true}
+                          categories={categories}
                         />
                       ))}
                     </div>

@@ -31,10 +31,19 @@ interface Task {
   level: number
   priority?: number
   deadline?: string
+  categoryId?: number
   parentId?: number
   parentTitle?: string
   grandparentId?: number
   grandparentTitle?: string
+}
+
+interface TaskCategory {
+  id?: number
+  name: string
+  color: string
+  icon?: string
+  order?: number
 }
 
 export default function SchedulePage() {
@@ -54,6 +63,8 @@ export default function SchedulePage() {
   const [suggestedEndTime, setSuggestedEndTime] = useState<string>('')
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null)
   const [quickCreateMode, setQuickCreateMode] = useState(false)  // New state for quick create
+  const [categories, setCategories] = useState<TaskCategory[]>([])
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null)
 
   // Configure drag and drop sensors
   const mouseSensor = useSensor(MouseSensor, {
@@ -78,6 +89,23 @@ export default function SchedulePage() {
     const weekStart = monday.toISOString().split('T')[0]
     setCurrentWeekStart(weekStart)
   }, [])
+
+  // Load categories
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch('/api/task-categories')
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data)
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadCategories()
+  }, [loadCategories])
 
   const fetchWeekSchedule = useCallback(async () => {
     if (!currentWeekStart) return
@@ -347,6 +375,63 @@ export default function SchedulePage() {
     }
   }
 
+  const handleUpdateBlockCategory = async (blockId: number, categoryId: number | null) => {
+    try {
+      const response = await fetch(`/api/schedule/blocks?id=${blockId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ categoryId })
+      })
+
+      if (response.ok) {
+        // Find the category info to update local state
+        const category = categoryId ? categories.find(cat => cat.id === categoryId) : null
+
+        // Update local state
+        setWeekSchedule(prev => {
+          const updated = { ...prev }
+          Object.keys(updated).forEach(date => {
+            updated[date] = updated[date].map(block =>
+              block.id === blockId ? {
+                ...block,
+                categoryId,
+                categoryName: category?.name || null,
+                categoryColor: category?.color || null
+              } : block
+            )
+          })
+          return updated
+        })
+
+        // Update day view blocks if open
+        setSelectedDayBlocks(prev =>
+          prev.map(block =>
+            block.id === blockId ? {
+              ...block,
+              categoryId,
+              categoryName: category?.name || null,
+              categoryColor: category?.color || null
+            } : block
+          )
+        )
+
+        toast({
+          title: "成功",
+          description: "任务分类已更新",
+        })
+      }
+    } catch (error) {
+      console.error('Error updating block category:', error)
+      toast({
+        title: "错误",
+        description: "无法更新任务分类",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleEditBlock = (block: ScheduleBlock) => {
     setEditingBlock(block)
     setSelectedDate(block.date)
@@ -433,7 +518,11 @@ export default function SchedulePage() {
           {/* Left Panel - Task Pool and Routine Pool */}
           <div className="lg:col-span-1">
             <div className="space-y-4 sticky top-4">
-              <TaskPool />
+              <TaskPool
+                categories={categories}
+                selectedCategoryFilter={selectedCategoryFilter}
+                onCategoryFilterChange={setSelectedCategoryFilter}
+              />
               <RoutinePool />
             </div>
           </div>
@@ -462,6 +551,7 @@ export default function SchedulePage() {
             <TimelineWeekView
               weekSchedule={weekSchedule}
               currentWeekStart={currentWeekStart}
+              categories={categories}
               onWeekChange={handleWeekChange}
               onBlockClick={handleBlockClick}
               onBlockEdit={handleBlockEdit}
@@ -521,6 +611,7 @@ export default function SchedulePage() {
           existingBlock={editingBlock || undefined}
           task={draggedTask}
           date={selectedDate}
+          categories={categories}
           suggestedStartTime={suggestedStartTime}
           suggestedEndTime={suggestedEndTime}
           quickCreate={quickCreateMode}
@@ -532,7 +623,9 @@ export default function SchedulePage() {
           onClose={() => setDayViewOpen(false)}
           date={selectedDate}
           blocks={selectedDayBlocks}
+          categories={categories}
           onUpdateStatus={handleUpdateBlockStatus}
+          onUpdateCategory={handleUpdateBlockCategory}
           onEditBlock={handleEditBlock}
           onDeleteBlock={handleDeleteBlock}
         />

@@ -20,10 +20,33 @@ db.exec(`
     parent_title TEXT,
     grandparent_title TEXT,
 
+    -- Category fields for performance
+    category_id INTEGER,
+    category_name TEXT,
+    category_color TEXT,
+
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `)
+
+// Check and add category columns if they don't exist (for backward compatibility)
+try {
+  const columns = db.prepare("PRAGMA table_info(schedule_blocks)").all() as any[]
+  const hasColumn = (name: string) => columns.some(col => col.name === name)
+
+  if (!hasColumn('category_id')) {
+    db.exec('ALTER TABLE schedule_blocks ADD COLUMN category_id INTEGER')
+  }
+  if (!hasColumn('category_name')) {
+    db.exec('ALTER TABLE schedule_blocks ADD COLUMN category_name TEXT')
+  }
+  if (!hasColumn('category_color')) {
+    db.exec('ALTER TABLE schedule_blocks ADD COLUMN category_color TEXT')
+  }
+} catch (error) {
+  console.log('Column migration error for schedule_blocks:', error)
+}
 
 // Create indexes for performance
 db.exec(`
@@ -52,6 +75,9 @@ export interface ScheduleBlock {
   taskTitle: string
   parentTitle?: string
   grandparentTitle?: string
+  categoryId?: number
+  categoryName?: string
+  categoryColor?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -74,6 +100,9 @@ export function getScheduleByDateRange(startDate: string, endDate: string): Sche
       task_title as taskTitle,
       parent_title as parentTitle,
       grandparent_title as grandparentTitle,
+      category_id as categoryId,
+      category_name as categoryName,
+      category_color as categoryColor,
       created_at as createdAt,
       updated_at as updatedAt
     FROM schedule_blocks
@@ -98,6 +127,9 @@ export function getScheduleByDate(date: string): ScheduleBlock[] {
       task_title as taskTitle,
       parent_title as parentTitle,
       grandparent_title as grandparentTitle,
+      category_id as categoryId,
+      category_name as categoryName,
+      category_color as categoryColor,
       created_at as createdAt,
       updated_at as updatedAt
     FROM schedule_blocks
@@ -113,8 +145,9 @@ export function createScheduleBlock(block: ScheduleBlock): ScheduleBlock {
   const stmt = db.prepare(`
     INSERT INTO schedule_blocks (
       task_id, date, start_time, end_time, comment, status,
-      task_title, parent_title, grandparent_title
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      task_title, parent_title, grandparent_title,
+      category_id, category_name, category_color
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const result = stmt.run(
@@ -126,7 +159,10 @@ export function createScheduleBlock(block: ScheduleBlock): ScheduleBlock {
     block.status || 'scheduled',
     block.taskTitle,
     block.parentTitle || null,
-    block.grandparentTitle || null
+    block.grandparentTitle || null,
+    block.categoryId || null,
+    block.categoryName || null,
+    block.categoryColor || null
   )
 
   return { ...block, id: result.lastInsertRowid as number }
@@ -156,6 +192,18 @@ export function updateScheduleBlock(id: number, updates: Partial<ScheduleBlock>)
   if (updates.status !== undefined) {
     fields.push('status = ?')
     values.push(updates.status)
+  }
+  if (updates.categoryId !== undefined) {
+    fields.push('category_id = ?')
+    values.push(updates.categoryId)
+  }
+  if (updates.categoryName !== undefined) {
+    fields.push('category_name = ?')
+    values.push(updates.categoryName)
+  }
+  if (updates.categoryColor !== undefined) {
+    fields.push('category_color = ?')
+    values.push(updates.categoryColor)
   }
 
   if (fields.length === 0) return

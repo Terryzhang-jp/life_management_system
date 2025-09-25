@@ -12,10 +12,17 @@ import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/sched
 import { Tooltip } from '@/components/ui/tooltip'
 import { getLocalDateString } from '@/lib/date-utils'
 
+interface TaskCategory {
+  id: number
+  name: string
+  color: string
+}
+
 interface TimeSlotDropZoneProps {
   date: string
   hour: number
   blocks: ScheduleBlock[]
+  categories: TaskCategory[]
   onBlockClick: (block: ScheduleBlock) => void
   onBlockEdit: (block: ScheduleBlock) => void
   onBlockDelete: (blockId: number) => void
@@ -26,6 +33,7 @@ function TimeSlotDropZone({
   date,
   hour,
   blocks = [],
+  categories,
   onBlockClick,
   onBlockEdit,
   onBlockDelete,
@@ -110,6 +118,18 @@ function TimeSlotDropZone({
   // Check if this hour is sleep time (11 PM - 7 AM)
   const isSleepTime = hour >= 23 || hour < 7
 
+  // Category functionality removed for main page simplicity
+  // const getBlockCategory = (block: ScheduleBlock) => {
+  //   if (block.categoryId && block.categoryName && block.categoryColor) {
+  //     return {
+  //       id: block.categoryId,
+  //       name: block.categoryName,
+  //       color: block.categoryColor
+  //     }
+  //   }
+  //   return null
+  // }
+
   return (
     <div
       ref={setNodeRef}
@@ -135,6 +155,7 @@ function TimeSlotDropZone({
         const blockHeight = calculateBlockHeight(block)
         const displayLevel = getDisplayLevel(blockHeight)
         const statusIcon = getStatusIcon(block.status)
+        // const blockCategory = getBlockCategory(block) // Removed for main page simplicity
 
         return (
           <div
@@ -187,6 +208,18 @@ function TimeSlotDropZone({
                         {block.taskTitle}
                       </div>
                     </Tooltip>
+
+                    {/* Category Badge - Removed for main page simplicity */}
+                    {/* {blockCategory && displayLevel !== 'minimal' && (
+                      <div className="mt-0.5">
+                        <span
+                          className="inline-block px-1 py-0.5 text-xs font-medium text-white rounded"
+                          style={{ backgroundColor: blockCategory.color, fontSize: '10px' }}
+                        >
+                          {blockCategory.name}
+                        </span>
+                      </div>
+                    )} */}
                   </div>
 
                   {(displayLevel === 'basic' || displayLevel === 'full') && (
@@ -280,6 +313,7 @@ function TimeSlotDropZone({
 interface TimelineWeekViewProps {
   weekSchedule: WeekSchedule
   currentWeekStart: string
+  categories: TaskCategory[]
   onWeekChange: (direction: 'prev' | 'next') => void
   onBlockClick: (block: ScheduleBlock) => void
   onBlockEdit: (block: ScheduleBlock) => void
@@ -291,6 +325,7 @@ interface TimelineWeekViewProps {
 export function TimelineWeekView({
   weekSchedule,
   currentWeekStart,
+  categories,
   onWeekChange,
   onBlockClick,
   onBlockEdit,
@@ -513,6 +548,7 @@ export function TimelineWeekView({
                       date={date}
                       hour={hour}
                       blocks={weekSchedule[date] || []}
+                      categories={categories}
                       onBlockClick={onBlockClick}
                       onBlockEdit={onBlockEdit}
                       onBlockDelete={onBlockDelete}
