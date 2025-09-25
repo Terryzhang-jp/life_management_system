@@ -48,7 +48,7 @@ export interface ScheduleBlock {
   startTime: string
   endTime: string
   comment?: string
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  status: 'scheduled' | 'in_progress' | 'partially_completed' | 'completed' | 'cancelled'
   taskTitle: string
   parentTitle?: string
   grandparentTitle?: string

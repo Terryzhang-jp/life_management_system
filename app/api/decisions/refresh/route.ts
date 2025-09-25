@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import decisionsDbManager from '@/lib/decisions-db'
+import { getLocalDateString } from '@/lib/date-utils'
 
 // POST - 处理每日自动刷新
 export async function POST(request: NextRequest) {
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDateString()
 
     // 检查今天是否已经刷新过
     const isRefreshed = await decisionsDbManager.isAlreadyRefreshed(today)
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 // GET - 检查是否需要刷新
 export async function GET(request: NextRequest) {
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDateString()
     const isRefreshed = await decisionsDbManager.isAlreadyRefreshed(today)
 
     return NextResponse.json({

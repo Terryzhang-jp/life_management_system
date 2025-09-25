@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Edit, Trash2, Play, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Play, CheckCircle, Clock3, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock } from '@/lib/schedule-db'
 import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/schedule-layout'
@@ -47,6 +47,21 @@ export function DayView({
     return 'full'                                  // >= 65px: All information
   }
 
+  const isToday = useCallback(() => {
+    const today = new Date()
+    const viewDate = new Date(date)
+    return today.toDateString() === viewDate.toDateString()
+  }, [date])
+
+  const getCurrentTimePosition = useCallback(() => {
+    if (!isToday()) return null
+    const now = currentTime
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+    const startMinutes = currentHour * 60 + currentMinute
+    return startMinutes * MINUTE_HEIGHT
+  }, [currentTime, isToday])
+
   // Update current time every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -68,22 +83,7 @@ export function DayView({
         }, 100)
       }
     }
-  }, [isOpen, currentTime])
-
-  const isToday = () => {
-    const today = new Date()
-    const viewDate = new Date(date)
-    return today.toDateString() === viewDate.toDateString()
-  }
-
-  const getCurrentTimePosition = () => {
-    if (!isToday()) return null
-    const now = currentTime
-    const currentHour = now.getHours()
-    const currentMinute = now.getMinutes()
-    const startMinutes = currentHour * 60 + currentMinute
-    return startMinutes * MINUTE_HEIGHT
-  }
+  }, [getCurrentTimePosition, isOpen, isToday])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -103,6 +103,8 @@ export function DayView({
     switch (status) {
       case 'completed': return <CheckCircle className="w-4 h-4" />
       case 'in_progress': return <Play className="w-4 h-4" />
+      case 'partially_completed': return <Clock3 className="w-4 h-4" />
+      case 'scheduled': return <Circle className="w-4 h-4" />
       default: return null
     }
   }
@@ -216,6 +218,7 @@ export function DayView({
                           displayLevel === 'minimal' ? 'p-1' : 'p-2',
                           block.status === 'completed' && 'border-green-600 text-green-700 hover:bg-green-50',
                           block.status === 'in_progress' && 'border-yellow-600 text-yellow-700 hover:bg-yellow-50',
+                          block.status === 'partially_completed' && 'border-orange-500 text-orange-700 hover:bg-orange-50',
                           block.status === 'cancelled' && 'border-gray-500 text-gray-600 hover:bg-gray-50 opacity-60',
                           block.status === 'scheduled' && 'border-gray-800 text-gray-800 hover:bg-gray-50',
                           selectedBlock?.id === block.id && 'ring-2 ring-blue-400 shadow-lg'
@@ -229,6 +232,76 @@ export function DayView({
                         }}
                         onClick={() => setSelectedBlock(selectedBlock?.id === block.id ? null : block)}
                       >
+                        {/* Status Quick Actions - show when block is selected */}
+                        {selectedBlock?.id === block.id && (
+                          <div className="absolute -top-10 left-0 right-0 bg-white border rounded-md shadow-lg p-2 z-30 flex gap-1 justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onUpdateStatus(block.id!, 'scheduled')
+                              }}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                block.status === 'scheduled' && "bg-gray-100"
+                              )}
+                              title="未开始"
+                            >
+                              <Circle className="w-3 h-3 mr-1" />
+                              未开始
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onUpdateStatus(block.id!, 'in_progress')
+                              }}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                block.status === 'in_progress' && "bg-yellow-100"
+                              )}
+                              title="进行中"
+                            >
+                              <Play className="w-3 h-3 mr-1" />
+                              进行中
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onUpdateStatus(block.id!, 'partially_completed')
+                              }}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                block.status === 'partially_completed' && "bg-orange-100"
+                              )}
+                              title="部分完成"
+                            >
+                              <Clock3 className="w-3 h-3 mr-1" />
+                              部分完成
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onUpdateStatus(block.id!, 'completed')
+                              }}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                block.status === 'completed' && "bg-green-100"
+                              )}
+                              title="已完成"
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              已完成
+                            </Button>
+                          </div>
+                        )}
+
                         {/* For minimal blocks, wrap entire block in Tooltip */}
                         {displayLevel === 'minimal' ? (
                           <Tooltip content={`${block.taskTitle} (${block.startTime} - ${block.endTime})`}>

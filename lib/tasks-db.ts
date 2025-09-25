@@ -15,6 +15,7 @@ export interface Task {
   isUnclear?: boolean  // 是否模糊
   unclearReason?: string  // 模糊原因注释
   hasUnclearChildren?: boolean  // 是否有模糊的子任务(用于传播显示)
+  categoryId?: number  // 任务分类ID
   createdAt?: string
   updatedAt?: string
 }
@@ -63,6 +64,7 @@ class TasksDatabaseManager {
         deadline DATE,
         is_unclear BOOLEAN DEFAULT 0,
         unclear_reason TEXT,
+        category_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
@@ -91,6 +93,9 @@ class TasksDatabaseManager {
       }
       if (!hasColumn('deadline')) {
         db.exec('ALTER TABLE tasks ADD COLUMN deadline DATE')
+      }
+      if (!hasColumn('category_id')) {
+        db.exec('ALTER TABLE tasks ADD COLUMN category_id INTEGER')
       }
     } catch (error) {
       console.log('Column migration error:', error)
@@ -121,6 +126,7 @@ class TasksDatabaseManager {
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
       hasUnclearChildren: Boolean(hasUnclearChildrenRow),
+      categoryId: row.category_id || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -149,6 +155,7 @@ class TasksDatabaseManager {
         deadline: row.deadline || undefined,
         isUnclear: Boolean(row.is_unclear),
         unclearReason: row.unclear_reason || '',
+        categoryId: row.category_id || undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at
       }
@@ -177,8 +184,8 @@ class TasksDatabaseManager {
   async addTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const db = this.getDb()
     const result = db.prepare(`
-      INSERT INTO tasks (type, title, description, priority, parent_id, level, deadline, is_unclear, unclear_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (type, title, description, priority, parent_id, level, deadline, is_unclear, unclear_reason, category_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.type,
       task.title,
@@ -188,7 +195,8 @@ class TasksDatabaseManager {
       task.level || 0,
       task.deadline || null,
       task.isUnclear ? 1 : 0,
-      task.unclearReason || ''
+      task.unclearReason || '',
+      task.categoryId || null
     )
 
     return result.lastInsertRowid as number
@@ -236,6 +244,10 @@ class TasksDatabaseManager {
       updates.push('unclear_reason = ?')
       values.push(task.unclearReason)
     }
+    if (task.categoryId !== undefined) {
+      updates.push('category_id = ?')
+      values.push(task.categoryId || null)
+    }
 
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP')
@@ -274,6 +286,7 @@ class TasksDatabaseManager {
       deadline: row.deadline || undefined,
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
+      categoryId: row.category_id || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }))
@@ -303,6 +316,7 @@ class TasksDatabaseManager {
       deadline: row.deadline || undefined,
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
+      categoryId: row.category_id || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }))

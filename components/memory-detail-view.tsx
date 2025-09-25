@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { X, Edit2, Calendar, MapPin, ChevronLeft, ChevronRight } from "lucide-react"
+import Image from "next/image"
 
 interface MemoryRecord {
   id?: number
@@ -62,10 +63,13 @@ export function MemoryDetailView({ memory, onClose, onEdit }: MemoryDetailViewPr
         <div className="flex-1 relative bg-gray-100 flex items-center justify-center">
           {memory.photos.length > 0 ? (
             <>
-              <img
+              <Image
                 src={memory.photos[currentPhotoIndex]}
                 alt={memory.title || "记忆照片"}
-                className="max-w-full max-h-full object-contain"
+                fill
+                className="object-contain"
+                sizes="50vw"
+                unoptimized
               />
 
               {/* 照片导航 */}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { getLocalDateString } from '@/lib/date-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     const routineId = formData.get('routineId') as string
     const recordDate = formData.get('recordDate') as string
 
-    const fileName = `${routineId || 'unknown'}_${recordDate || currentDate.toISOString().split('T')[0]}_${timestamp}.jpg`
+    const fileName = `${routineId || 'unknown'}_${recordDate || getLocalDateString(currentDate)}_${timestamp}.jpg`
 
     // 创建目录结构
     const uploadDir = path.join(process.cwd(), 'public', 'habit-photos', year.toString(), month)

@@ -6,6 +6,7 @@ import { Plus, X, Edit2, ImageIcon } from "lucide-react"
 import { MemoryForm } from "./memory-form"
 import { MemoryDetailView } from "./memory-detail-view"
 import { useToast } from "@/hooks/use-toast"
+import Image from "next/image"
 
 interface MemoryRecord {
   id?: number
@@ -59,7 +60,7 @@ export function MemoriesGallery({ className }: MemoriesGalleryProps) {
 
 
   // 获取所有记忆
-  const fetchMemories = async () => {
+  const fetchMemories = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch('/api/memories?type=all')
@@ -106,11 +107,11 @@ export function MemoriesGallery({ className }: MemoriesGalleryProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadImageDimensions])
 
   useEffect(() => {
-    fetchMemories()
-  }, [refreshKey])
+    void fetchMemories()
+  }, [fetchMemories, refreshKey])
 
   // 处理记忆添加或编辑完成
   const handleMemoryAddedOrEdited = () => {
@@ -220,7 +221,8 @@ export function MemoriesGallery({ className }: MemoriesGalleryProps) {
           {memories.map((memory) => {
             const firstPhoto = memory.photos[0]
             const photoDimension = firstPhoto ? photoDimensions[firstPhoto] : null
-            const aspectRatio = photoDimension?.aspectRatio || 1
+            const imageWidth = photoDimension?.width || 800
+            const imageHeight = photoDimension?.height || 800
 
             return (
               <div
@@ -231,15 +233,17 @@ export function MemoriesGallery({ className }: MemoriesGalleryProps) {
                 {/* 照片显示 */}
                 {memory.photos.length > 0 && (
                   <div className="relative">
-                    <img
+                    <Image
                       src={memory.photos[0]}
                       alt={memory.title || "记忆照片"}
+                      width={imageWidth}
+                      height={imageHeight}
                       className="w-full h-auto object-cover rounded-t-lg"
-                      style={{ aspectRatio: `${aspectRatio}` }}
                       onClick={(e) => {
                         e.stopPropagation()
                         openImagePreview(memory.photos[0])
                       }}
+                      unoptimized
                     />
                     {memory.photos.length > 1 && (
                       <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
@@ -326,11 +330,14 @@ export function MemoriesGallery({ className }: MemoriesGalleryProps) {
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
           onClick={closeImagePreview}
         >
-          <div className="relative max-w-4xl max-h-full">
-            <img
+          <div className="relative w-[90vw] max-w-4xl h-[80vh]">
+            <Image
               src={selectedImage}
               alt="预览"
-              className="max-w-full max-h-full object-contain"
+              fill
+              className="object-contain"
+              sizes="90vw"
+              unoptimized
             />
             <Button
               onClick={closeImagePreview}

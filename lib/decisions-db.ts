@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import path from 'path'
+import { getLocalDateString } from './date-utils'
 
 export interface DailyDecision {
   id?: number
@@ -127,7 +128,7 @@ class DecisionsDatabaseManager {
 
   // 获取今日决策
   async getTodayDecisions(): Promise<DailyDecision[]> {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getLocalDateString()
     return this.getDecisionsByDate(today)
   }
 

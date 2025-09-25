@@ -1,21 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { X, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getLocalDateString } from "@/lib/date-utils"
 
 interface DecisionFormProps {
   onDecisionAdded?: () => void
+  onDecisionUpdated?: () => void
   onClose: () => void
+  mode?: 'create' | 'edit'
+  initialDecision?: string
+  decisionId?: number
 }
 
-export function DecisionForm({ onDecisionAdded, onClose }: DecisionFormProps) {
+export function DecisionForm({
+  onDecisionAdded,
+  onDecisionUpdated,
+  onClose,
+  mode = 'create',
+  initialDecision = '',
+  decisionId
+}: DecisionFormProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [decision, setDecision] = useState("")
+  const [decision, setDecision] = useState(initialDecision)
+
+  const isEditMode = mode === 'edit'
+
+  // Keep local state in sync when editing a different decision
+  useEffect(() => {
+    setDecision(initialDecision)
+  }, [initialDecision, isEditMode])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,19 +51,52 @@ export function DecisionForm({ onDecisionAdded, onClose }: DecisionFormProps) {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/decisions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          decision: decision.trim(),
-          date: new Date().toISOString().split('T')[0],
-          status: 'pending'
-        })
-      })
+      if (isEditMode) {
+        if (!decisionId) {
+          throw new Error('未找到需要编辑的决策')
+        }
 
-      if (response.ok) {
+        const response = await fetch('/api/decisions', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: decisionId,
+            decision: decision.trim()
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to update decision')
+        }
+
+        toast({
+          title: "成功",
+          description: "决策已更新"
+        })
+
+        onClose()
+        onDecisionUpdated?.()
+      } else {
+        const response = await fetch('/api/decisions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            decision: decision.trim(),
+            date: getLocalDateString(),
+            status: 'pending'
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to add decision')
+        }
+
         toast({
           title: "成功",
           description: "决策已添加"
@@ -56,16 +108,14 @@ export function DecisionForm({ onDecisionAdded, onClose }: DecisionFormProps) {
         if (onDecisionAdded) {
           onDecisionAdded()
         }
-      } else {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to add decision')
       }
+
 
     } catch (error) {
       console.error('Submit error:', error)
       toast({
-        title: "添加失败",
-        description: error instanceof Error ? error.message : "添加决策失败",
+        title: isEditMode ? "更新失败" : "添加失败",
+        description: error instanceof Error ? error.message : isEditMode ? "更新决策失败" : "添加决策失败",
         variant: "destructive"
       })
     } finally {
@@ -87,7 +137,9 @@ export function DecisionForm({ onDecisionAdded, onClose }: DecisionFormProps) {
         </Button>
 
         {/* 表单标题 */}
-        <h3 className="text-lg font-semibold mb-4">添加今日决策</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          {isEditMode ? "编辑今日决策" : "添加今日决策"}
+        </h3>
 
         {/* 表单内容 */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -112,10 +164,10 @@ export function DecisionForm({ onDecisionAdded, onClose }: DecisionFormProps) {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  添加中...
+                  {isEditMode ? "保存中..." : "添加中..."}
                 </>
               ) : (
-                "添加决策"
+                isEditMode ? "保存修改" : "添加决策"
               )}
             </Button>
             <Button

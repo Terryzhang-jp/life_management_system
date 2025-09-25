@@ -79,14 +79,7 @@ export default function SchedulePage() {
     setCurrentWeekStart(weekStart)
   }, [])
 
-  // Fetch week schedule when week changes
-  useEffect(() => {
-    if (currentWeekStart) {
-      fetchWeekSchedule()
-    }
-  }, [currentWeekStart])
-
-  const fetchWeekSchedule = async () => {
+  const fetchWeekSchedule = useCallback(async () => {
     if (!currentWeekStart) return
 
     setLoading(true)
@@ -108,7 +101,14 @@ export default function SchedulePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentWeekStart, toast])
+
+  // Fetch week schedule when week changes
+  useEffect(() => {
+    if (currentWeekStart) {
+      fetchWeekSchedule()
+    }
+  }, [currentWeekStart, fetchWeekSchedule])
 
   const handleWeekChange = (direction: 'prev' | 'next') => {
     const currentDate = new Date(currentWeekStart)

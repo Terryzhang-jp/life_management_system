@@ -1,3 +1,5 @@
+import { getLocalDateString } from './date-utils'
+
 // 决策自动刷新逻辑
 export async function checkAndRefreshDecisions(): Promise<{ needsRefresh: boolean; processedCount?: number }> {
   try {
@@ -45,14 +47,14 @@ export async function checkAndRefreshDecisions(): Promise<{ needsRefresh: boolea
 
 // 检查决策是否为昨日或更早的日期
 export function isDecisionExpired(decisionDate: string): boolean {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getLocalDateString()
   return decisionDate < today
 }
 
 // 计算延期天数
 export function calculateDelayDays(decisionDate: string): number {
-  const today = new Date()
-  const decision = new Date(decisionDate)
+  const today = new Date(`${getLocalDateString()}T00:00:00`)
+  const decision = new Date(`${decisionDate}T00:00:00`)
   const timeDiff = today.getTime() - decision.getTime()
   return Math.floor(timeDiff / (1000 * 60 * 60 * 24))
 }

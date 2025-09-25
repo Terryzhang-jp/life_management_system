@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ArrowLeft,
   Calendar,
@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useToast } from "@/hooks/use-toast"
+import Image from "next/image"
 
 interface ExpenseCategory {
   id: number
@@ -178,7 +179,7 @@ const toInputTime = (value: string) => {
 
   useEffect(() => {
     void loadData()
-  }, [])
+  }, [loadData])
 
   useEffect(() => {
     if (!showCategoryManager) return
@@ -201,16 +202,7 @@ const toInputTime = (value: string) => {
     }
   }, [categories, selectedCategoryId])
 
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      await Promise.all([loadCategories(), loadExpenses()])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       const response = await fetch("/api/expense-categories")
       if (!response.ok) throw new Error("Failed to fetch categories")
@@ -224,9 +216,9 @@ const toInputTime = (value: string) => {
         variant: "destructive"
       })
     }
-  }
+  }, [toast])
 
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       const response = await fetch("/api/expenses")
       if (!response.ok) throw new Error("Failed to fetch expenses")
@@ -246,7 +238,16 @@ const toInputTime = (value: string) => {
         variant: "destructive"
       })
     }
-  }
+  }, [toast])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      await Promise.all([loadCategories(), loadExpenses()])
+    } finally {
+      setLoading(false)
+    }
+  }, [loadCategories, loadExpenses])
 
   const resetNewExpenseForm = () => {
     setNewExpenseTitle("")
@@ -698,13 +699,16 @@ const toInputTime = (value: string) => {
                                   href={url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="block w-24 h-24 rounded border border-gray-200 overflow-hidden"
+                                  className="relative block w-24 h-24 rounded border border-gray-200 overflow-hidden"
                                   title="点击查看大图"
                                 >
-                                  <img
+                                  <Image
                                     src={url}
                                     alt="receipt"
-                                    className="w-full h-full object-cover"
+                                    fill
+                                    sizes="96px"
+                                    className="object-cover"
+                                    unoptimized
                                   />
                                 </a>
                               ))}
@@ -1018,7 +1022,14 @@ const toInputTime = (value: string) => {
                   <div className="flex flex-wrap gap-2">
                     {editExistingReceipts.map((url) => (
                       <div key={url} className="relative w-24 h-24 rounded border border-gray-200 overflow-hidden">
-                        <img src={url} alt="receipt" className="w-full h-full object-cover" />
+                        <Image
+                          src={url}
+                          alt="receipt"
+                          fill
+                          sizes="96px"
+                          className="object-cover"
+                          unoptimized
+                        />
                         <Button
                           variant="destructive"
                           size="icon"

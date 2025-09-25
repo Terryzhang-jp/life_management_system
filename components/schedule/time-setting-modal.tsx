@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -93,14 +93,7 @@ export function TimeSettingModal({
     }
   }, [isOpen, mode, existingBlock, task, suggestedStartTime, suggestedEndTime])
 
-  // Check conflicts when time changes
-  useEffect(() => {
-    if (startTime && endTime && startTime < endTime) {
-      checkConflicts()
-    }
-  }, [startTime, endTime, date])
-
-  const checkConflicts = async () => {
+  const checkConflicts = useCallback(async () => {
     if (!startTime || !endTime || startTime >= endTime) return
 
     setChecking(true)
@@ -119,7 +112,14 @@ export function TimeSettingModal({
     } finally {
       setChecking(false)
     }
-  }
+  }, [date, endTime, existingBlock?.id, mode, startTime])
+
+  // Check conflicts when time changes
+  useEffect(() => {
+    if (startTime && endTime && startTime < endTime) {
+      void checkConflicts()
+    }
+  }, [checkConflicts, endTime, startTime])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -195,8 +195,8 @@ export function TimeSettingModal({
           comment: comment.trim() || undefined,
           status: 'scheduled',
           taskTitle: task.title,
-          parentTitle: task.level === 2 ? task.parentTitle : undefined,
-          grandparentTitle: task.level === 2 ? task.grandparentTitle : undefined
+          parentTitle: task.parentTitle || undefined,
+          grandparentTitle: task.grandparentTitle || undefined
         }
         onConfirm(scheduleBlock)
       }

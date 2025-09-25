@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Camera, Loader2, Upload, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getLocalDateString } from "@/lib/date-utils"
+import Image from "next/image"
 
 interface Routine {
   id: number
@@ -27,13 +29,13 @@ export function HabitRecordForm({ onRecordAdded, className }: HabitRecordFormPro
 
   // 表单状态
   const [selectedRoutine, setSelectedRoutine] = useState<string>("")
-  const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [recordDate, setRecordDate] = useState<string>(getLocalDateString())
   const [description, setDescription] = useState<string>("")
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string>("")
 
   // 获取所有routine类型的任务
-  const fetchRoutines = async () => {
+  const fetchRoutines = useCallback(async () => {
     try {
       const response = await fetch('/api/tasks')
       if (response.ok) {
@@ -43,11 +45,11 @@ export function HabitRecordForm({ onRecordAdded, className }: HabitRecordFormPro
     } catch (error) {
       console.error('Failed to fetch routines:', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchRoutines()
-  }, [])
+    void fetchRoutines()
+  }, [fetchRoutines])
 
   // 处理照片选择
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +175,7 @@ export function HabitRecordForm({ onRecordAdded, className }: HabitRecordFormPro
 
         // 重置表单
         setSelectedRoutine("")
-        setRecordDate(new Date().toISOString().split('T')[0])
+        setRecordDate(getLocalDateString())
         setDescription("")
         clearPhoto()
 
@@ -270,11 +272,14 @@ export function HabitRecordForm({ onRecordAdded, className }: HabitRecordFormPro
                 </div>
               </div>
             ) : (
-              <div className="relative">
-                <img
+              <div className="relative h-20">
+                <Image
                   src={photoPreview}
                   alt="Preview"
-                  className="w-full h-20 object-cover rounded-lg"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 400px"
+                  className="object-cover rounded-lg"
+                  unoptimized
                 />
                 <Button
                   type="button"

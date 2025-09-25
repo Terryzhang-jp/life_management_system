@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Clock, Edit, Trash2, Play, CheckCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Edit, Trash2, Play, CheckCircle, Clock3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock, WeekSchedule } from '@/lib/schedule-db'
 import { calculateBlockLayouts, calculateBlockVerticalLayout } from '@/lib/schedule-layout'
 import { Tooltip } from '@/components/ui/tooltip'
+import { getLocalDateString } from '@/lib/date-utils'
 
 interface TimeSlotDropZoneProps {
   date: string
@@ -69,6 +70,7 @@ function TimeSlotDropZone({
     switch (status) {
       case 'completed': return 'bg-white border-2 border-green-600 text-green-700 hover:bg-green-50'
       case 'in_progress': return 'bg-white border-2 border-yellow-600 text-yellow-700 hover:bg-yellow-50'
+      case 'partially_completed': return 'bg-white border-2 border-orange-500 text-orange-700 hover:bg-orange-50'
       case 'cancelled': return 'bg-white border-2 border-gray-500 text-gray-600 hover:bg-gray-50'
       default: return 'bg-white border-2 border-gray-800 text-gray-800 hover:bg-gray-50'
     }
@@ -86,6 +88,7 @@ function TimeSlotDropZone({
     switch (status) {
       case 'completed': return <CheckCircle className="w-3 h-3" />
       case 'in_progress': return <Play className="w-3 h-3" />
+      case 'partially_completed': return <Clock3 className="w-3 h-3" />
       default: return null
     }
   }
@@ -308,11 +311,33 @@ export function TimelineWeekView({
   }, [])
 
   // Generate week dates
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(currentWeekStart)
-    date.setDate(date.getDate() + i)
-    return date.toISOString().split('T')[0]
-  })
+  const weekDates = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(currentWeekStart)
+      date.setDate(date.getDate() + i)
+      return date.toISOString().split('T')[0]
+    })
+  }, [currentWeekStart])
+
+  // Check if a date is today
+  const isDateToday = (dateStr: string) => {
+    const today = getLocalDateString()
+    return dateStr === today
+  }
+
+  // Calculate current time position for timeline
+  const getCurrentTimePosition = useCallback(() => {
+    const now = currentTime
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+
+    // Calculate position: base position (currentHour * 60px) + offset for minutes
+    // No header offset needed since this is positioned relative to the time slots grid
+    const basePosition = currentHour * 60 // 60px per hour (matches style={{ height: '60px' }})
+    const minuteOffset = (currentMinute / 60) * 60 // proportional offset within the hour
+
+    return basePosition + minuteOffset
+  }, [currentTime])
 
   // Auto-scroll to current time when component mounts or time/week changes
   useEffect(() => {
@@ -329,27 +354,7 @@ export function TimelineWeekView({
         }, 100) // Small delay to ensure DOM is ready
       }
     }
-  }, [currentWeekStart, currentTime, weekDates]) // Trigger when week changes or time updates
-
-  // Check if a date is today
-  const isDateToday = (dateStr: string) => {
-    const today = new Date().toISOString().split('T')[0]
-    return dateStr === today
-  }
-
-  // Calculate current time position for timeline
-  const getCurrentTimePosition = () => {
-    const now = currentTime
-    const currentHour = now.getHours()
-    const currentMinute = now.getMinutes()
-
-    // Calculate position: base position (currentHour * 60px) + offset for minutes
-    // No header offset needed since this is positioned relative to the time slots grid
-    const basePosition = currentHour * 60 // 60px per hour (matches style={{ height: '60px' }})
-    const minuteOffset = (currentMinute / 60) * 60 // proportional offset within the hour
-
-    return basePosition + minuteOffset
-  }
+  }, [currentWeekStart, currentTime, weekDates, getCurrentTimePosition]) // Trigger when week changes or time updates
 
   // Generate hours (0:00 - 23:00) - Full 24 hours
   const hours = Array.from({ length: 24 }, (_, i) => i)

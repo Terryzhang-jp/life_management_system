@@ -19,7 +19,7 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
   const [delayedDecisions, setDelayedDecisions] = useState<DailyDecision[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingDelayed, setLoadingDelayed] = useState(false)
-  const [showForm, setShowForm] = useState(false)
+  const [formState, setFormState] = useState<null | { mode: 'create' | 'edit'; decision?: DailyDecision }>(null)
   const [showDelayed, setShowDelayed] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -94,7 +94,15 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
     if (showDelayed) {
       fetchDelayedDecisions() // 同时刷新延期决策
     }
-    setShowForm(false)
+    setFormState(null)
+  }
+
+  const handleDecisionUpdated = () => {
+    setRefreshKey(prev => prev + 1)
+    if (showDelayed) {
+      fetchDelayedDecisions()
+    }
+    setFormState(null)
   }
 
   // 完成/取消完成决策
@@ -189,7 +197,7 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
         <h3 className="text-sm font-medium">今日三大决策</h3>
         {decisions.length < 3 && (
           <Button
-            onClick={() => setShowForm(true)}
+            onClick={() => setFormState({ mode: 'create' })}
             size="sm"
             variant="outline"
             className="flex items-center gap-1 text-xs"
@@ -219,18 +227,30 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
                     {decision.decision}
                   </p>
                 </div>
-                <Button
-                  onClick={() => handleToggleDecisionStatus(decision.id!, decision.status)}
-                  size="sm"
-                  variant="ghost"
-                  className={`h-6 w-6 p-0 ${decision.status === 'completed' ? 'text-green-500 hover:text-gray-500' : 'text-gray-400 hover:text-green-500'}`}
-                >
-                  {decision.status === 'completed' ? (
-                    <RotateCcw className="h-3 w-3" />
-                  ) : (
-                    <Check className="h-3 w-3" />
-                  )}
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    onClick={() => handleToggleDecisionStatus(decision.id!, decision.status)}
+                    size="sm"
+                    variant="ghost"
+                    className={`h-6 w-6 p-0 ${decision.status === 'completed' ? 'text-green-500 hover:text-gray-500' : 'text-gray-400 hover:text-green-500'}`}
+                    title={decision.status === 'completed' ? '重新激活' : '标记完成'}
+                  >
+                    {decision.status === 'completed' ? (
+                      <RotateCcw className="h-3 w-3" />
+                    ) : (
+                      <Check className="h-3 w-3" />
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => setFormState({ mode: 'edit', decision })}
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                    title="编辑"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -307,6 +327,15 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
                               <Check className="h-3 w-3" />
                             </Button>
                             <Button
+                              onClick={() => setFormState({ mode: 'edit', decision })}
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                              title="编辑"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
                               onClick={() => handleDeleteDecision(decision.id!)}
                               size="sm"
                               variant="ghost"
@@ -333,10 +362,14 @@ export function DailyDecisions({ className }: DailyDecisionsProps) {
       </div>
 
       {/* 弹框表单 */}
-      {showForm && (
+      {formState && (
         <DecisionForm
+          mode={formState.mode}
+          decisionId={formState.decision?.id}
+          initialDecision={formState.decision?.decision}
           onDecisionAdded={handleDecisionAdded}
-          onClose={() => setShowForm(false)}
+          onDecisionUpdated={handleDecisionUpdated}
+          onClose={() => setFormState(null)}
         />
       )}
     </div>

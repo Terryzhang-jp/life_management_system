@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2 } from "lucide-react"
 import { DatePicker, DateDisplay } from "@/components/ui/date-picker"
 import { TaskCompletionDialog } from "./task-completion-dialog"
+import TaskCategoryManager from "./task-category-manager"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 
@@ -32,9 +33,18 @@ interface Task {
   isUnclear?: boolean
   unclearReason?: string
   hasUnclearChildren?: boolean
+  categoryId?: number
   completion?: TaskCompletionInfo
   createdAt?: string
   updatedAt?: string
+}
+
+interface TaskCategory {
+  id?: number
+  name: string
+  color: string
+  icon?: string
+  order?: number
 }
 
 interface TasksData {
@@ -50,6 +60,8 @@ export default function TasksPage() {
     longTermTasks: [],
     shortTermTasks: []
   })
+  const [categories, setCategories] = useState<TaskCategory[]>([])
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
@@ -80,8 +92,22 @@ export default function TasksPage() {
   const [unclearTaskId, setUnclearTaskId] = useState<number | null>(null)
   const [unclearReason, setUnclearReason] = useState("")
 
+  // 检查任务是否有模糊的子任务
+  const checkTaskUnclearChildren = useCallback(async (taskId: number): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/tasks/unclear?taskId=${taskId}`)
+      if (response.ok) {
+        const data = await response.json()
+        return data.hasUnclearChildren
+      }
+    } catch (error) {
+      console.error('Error checking unclear children:', error)
+    }
+    return false
+  }, [])
+
   // 加载任务
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       const response = await fetch('/api/tasks')
       if (response.ok) {
@@ -108,14 +134,28 @@ export default function TasksPage() {
     } catch (error) {
       console.error('Error loading tasks:', error)
     }
-  }
+  }, [checkTaskUnclearChildren])
 
-  useEffect(() => {
-    loadTasks()
+  // 加载分类列表
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch('/api/task-categories')
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data)
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error)
+    }
   }, [])
 
+  useEffect(() => {
+    void loadTasks()
+    void loadCategories()
+  }, [loadTasks, loadCategories])
+
   // 加载子任务
-  const loadSubTasks = async (parentId: number, level: number = 1) => {
+  const loadSubTasks = useCallback(async (parentId: number, level: number = 1) => {
     try {
       const response = await fetch(`/api/tasks/subtasks?parentId=${parentId}&level=${level}`)
       if (response.ok) {
@@ -136,7 +176,7 @@ export default function TasksPage() {
     } catch (error) {
       console.error('Error loading subtasks:', error)
     }
-  }
+  }, [checkTaskUnclearChildren])
 
   // 展开任务详情
   const expandTask = async (task: Task) => {
@@ -462,20 +502,6 @@ export default function TasksPage() {
     }
   }
 
-  // 检查任务是否有模糊的子任务
-  const checkTaskUnclearChildren = async (taskId: number): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/tasks/unclear?taskId=${taskId}`)
-      if (response.ok) {
-        const data = await response.json()
-        return data.hasUnclearChildren
-      }
-    } catch (error) {
-      console.error('Error checking unclear children:', error)
-    }
-    return false
-  }
-
   // 切换任务模糊状态
   const handleToggleUnclear = (task: Task) => {
     if (task.isUnclear) {
@@ -490,7 +516,7 @@ export default function TasksPage() {
   }
 
   // 添加任务
-  const addTask = async (type: TaskType, title: string, description: string, priority: number = 999) => {
+  const addTask = async (type: TaskType, title: string, description: string, priority: number = 999, categoryId?: number) => {
     if (!title.trim()) {
       toast({
         title: "错误",
@@ -505,7 +531,7 @@ export default function TasksPage() {
       const response = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, title: title.trim(), description: description.trim(), priority })
+        body: JSON.stringify({ type, title: title.trim(), description: description.trim(), priority, categoryId })
       })
 
       if (response.ok) {
@@ -529,7 +555,7 @@ export default function TasksPage() {
   }
 
   // 更新任务
-  const updateTask = async (id: number, title: string, description: string, priority?: number) => {
+  const updateTask = async (id: number, title: string, description: string, priority?: number, categoryId?: number) => {
     if (!title.trim()) {
       toast({
         title: "错误",
@@ -544,6 +570,9 @@ export default function TasksPage() {
       const updateData: any = { id, title: title.trim(), description: description.trim() }
       if (priority !== undefined) {
         updateData.priority = priority
+      }
+      if (categoryId !== undefined) {
+        updateData.categoryId = categoryId
       }
 
       const response = await fetch('/api/tasks', {
@@ -674,12 +703,14 @@ export default function TasksPage() {
     const [taskTitle, setTaskTitle] = useState("")
     const [taskDesc, setTaskDesc] = useState("")
     const [taskPriority, setTaskPriority] = useState(999)
+    const [taskCategoryId, setTaskCategoryId] = useState<number | undefined>(undefined)
 
     const handleSubmit = async () => {
-      await addTask(type, taskTitle, taskDesc, taskPriority)
+      await addTask(type, taskTitle, taskDesc, taskPriority, taskCategoryId)
       setTaskTitle("")
       setTaskDesc("")
       setTaskPriority(999)
+      setTaskCategoryId(undefined)
       setShowForm(false)
     }
 
@@ -687,6 +718,7 @@ export default function TasksPage() {
       setTaskTitle("")
       setTaskDesc("")
       setTaskPriority(999)
+      setTaskCategoryId(undefined)
       setShowForm(false)
     }
 
@@ -706,7 +738,7 @@ export default function TasksPage() {
                 task={task}
                 isEditing={isEditing}
                 onEdit={() => setEditingId(task.id!)}
-                onSave={(title, description, priority) => updateTask(task.id!, title, description, priority)}
+                onSave={(title, description, priority, categoryId) => updateTask(task.id!, title, description, priority, categoryId)}
                 onCancel={() => setEditingId(null)}
                 onDelete={() => deleteTask(task.id!)}
                 onExpand={() => expandTask(task)}
@@ -732,20 +764,37 @@ export default function TasksPage() {
                 onChange={(e) => setTaskDesc(e.target.value)}
                 className="min-h-[60px]"
               />
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">重要度:</label>
-                <select
-                  value={taskPriority}
-                  onChange={(e) => setTaskPriority(Number(e.target.value))}
-                  className="px-2 py-1 border rounded text-sm"
-                >
-                  <option value={1}>1 (最重要)</option>
-                  <option value={2}>2 (重要)</option>
-                  <option value={3}>3 (较重要)</option>
-                  <option value={4}>4 (一般)</option>
-                  <option value={5}>5 (较低)</option>
-                  <option value={999}>无优先级</option>
-                </select>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">重要度:</label>
+                  <select
+                    value={taskPriority}
+                    onChange={(e) => setTaskPriority(Number(e.target.value))}
+                    className="px-2 py-1 border rounded text-sm"
+                  >
+                    <option value={1}>1 (最重要)</option>
+                    <option value={2}>2 (重要)</option>
+                    <option value={3}>3 (较重要)</option>
+                    <option value={4}>4 (一般)</option>
+                    <option value={5}>5 (较低)</option>
+                    <option value={999}>无优先级</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">分类:</label>
+                  <select
+                    value={taskCategoryId || ''}
+                    onChange={(e) => setTaskCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+                    className="px-2 py-1 border rounded text-sm"
+                  >
+                    <option value="">无分类</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -799,7 +848,7 @@ export default function TasksPage() {
     task: Task
     isEditing: boolean
     onEdit: () => void
-    onSave: (title: string, description: string, priority?: number) => void
+    onSave: (title: string, description: string, priority?: number, categoryId?: number) => void
     onCancel: () => void
     onDelete: () => void
     onExpand: () => void
@@ -810,15 +859,17 @@ export default function TasksPage() {
     const [editTitle, setEditTitle] = useState(task.title)
     const [editDescription, setEditDescription] = useState(task.description || "")
     const [editPriority, setEditPriority] = useState(task.priority || 999)
+    const [editCategoryId, setEditCategoryId] = useState(task.categoryId)
 
     const handleSave = () => {
-      onSave(editTitle, editDescription, editPriority)
+      onSave(editTitle, editDescription, editPriority, editCategoryId)
     }
 
     const handleCancel = () => {
       setEditTitle(task.title)
       setEditDescription(task.description || "")
       setEditPriority(task.priority || 999)
+      setEditCategoryId(task.categoryId)
       onCancel()
     }
 
@@ -854,20 +905,37 @@ export default function TasksPage() {
             onChange={(e) => setEditDescription(e.target.value)}
             className="min-h-[60px]"
           />
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium">重要度:</label>
-            <select
-              value={editPriority}
-              onChange={(e) => setEditPriority(Number(e.target.value))}
-              className="px-2 py-1 border rounded text-sm"
-            >
-              <option value={1}>1 (最重要)</option>
-              <option value={2}>2 (重要)</option>
-              <option value={3}>3 (较重要)</option>
-              <option value={4}>4 (一般)</option>
-              <option value={5}>5 (较低)</option>
-              <option value={999}>无优先级</option>
-            </select>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">重要度:</label>
+              <select
+                value={editPriority}
+                onChange={(e) => setEditPriority(Number(e.target.value))}
+                className="px-2 py-1 border rounded text-sm"
+              >
+                <option value={1}>1 (最重要)</option>
+                <option value={2}>2 (重要)</option>
+                <option value={3}>3 (较重要)</option>
+                <option value={4}>4 (一般)</option>
+                <option value={5}>5 (较低)</option>
+                <option value={999}>无优先级</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">分类:</label>
+              <select
+                value={editCategoryId || ''}
+                onChange={(e) => setEditCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+                className="px-2 py-1 border rounded text-sm"
+              >
+                <option value="">无分类</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button
@@ -910,6 +978,14 @@ export default function TasksPage() {
 
     const styles = getCompletionStyles()
 
+    // 获取分类信息
+    const getTaskCategory = () => {
+      if (!task.categoryId) return null
+      return categories.find(category => category.id === task.categoryId)
+    }
+
+    const taskCategory = getTaskCategory()
+
     return (
       <div className={`p-3 border rounded-lg transition-colors hover:opacity-80 ${styles.containerClass}`}>
         <div className="flex justify-between items-start">
@@ -946,6 +1022,15 @@ export default function TasksPage() {
                 {task.hasUnclearChildren && (
                   <span title="此任务有模糊的子任务">
                     <HelpCircle className="h-4 w-4 text-yellow-500" />
+                  </span>
+                )}
+                {taskCategory && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
+                    style={{ backgroundColor: taskCategory.color }}
+                    title={`分类: ${taskCategory.name}`}
+                  >
+                    {taskCategory.name}
                   </span>
                 )}
               </div>
@@ -1193,19 +1278,41 @@ export default function TasksPage() {
       <div className="max-w-7xl mx-auto">
         {/* 头部 */}
         <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <Link href="/">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                返回主页
-              </Button>
-            </Link>
-            <Link href="/past/completed">
-              <Button variant="outline" size="sm">
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                查看完成时间线
-              </Button>
-            </Link>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-4">
+              <Link href="/">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  返回主页
+                </Button>
+              </Link>
+              <Link href="/past/completed">
+                <Button variant="outline" size="sm">
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  查看完成时间线
+                </Button>
+              </Link>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* 分类筛选 */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">筛选分类:</label>
+                <select
+                  value={selectedCategoryFilter || ''}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value ? Number(e.target.value) : null)}
+                  className="px-2 py-1 border rounded text-sm"
+                >
+                  <option value="">所有分类</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* 分类管理 */}
+              <TaskCategoryManager />
+            </div>
           </div>
           <h1 className="text-3xl font-bold mb-2">任务管理</h1>
           <p className="text-gray-600">整理和追踪所有需要做的事情</p>
@@ -1684,19 +1791,19 @@ export default function TasksPage() {
           <TaskCard
             title="日常习惯"
             description="终身性的习惯和实践（如：读书、运动）"
-            tasks={tasks.routines}
+            tasks={selectedCategoryFilter ? tasks.routines.filter(task => task.categoryId === selectedCategoryFilter) : tasks.routines}
             type="routine"
           />
           <TaskCard
             title="长期任务"
             description="持续几个月到几年的项目（如：研究）"
-            tasks={tasks.longTermTasks}
+            tasks={selectedCategoryFilter ? tasks.longTermTasks.filter(task => task.categoryId === selectedCategoryFilter) : tasks.longTermTasks}
             type="long-term"
           />
           <TaskCard
             title="短期任务"
             description="持续几小时到几天的任务（如：workshop）"
-            tasks={tasks.shortTermTasks}
+            tasks={selectedCategoryFilter ? tasks.shortTermTasks.filter(task => task.categoryId === selectedCategoryFilter) : tasks.shortTermTasks}
             type="short-term"
           />
         </div>

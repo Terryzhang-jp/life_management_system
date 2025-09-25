@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { HeatmapData } from "@/lib/habits-db"
+import { getLocalDateString } from "@/lib/date-utils"
 
 interface HabitHeatmapProps {
   className?: string
@@ -13,21 +14,21 @@ export function HabitHeatmap({ className }: HabitHeatmapProps) {
   const [dateRange, setDateRange] = useState<string[]>([])
 
   // 生成最近21天的日期范围
-  const generateDateRange = () => {
+  const generateDateRange = useCallback(() => {
     const dates: string[] = []
     const today = new Date()
 
     for (let i = 20; i >= 0; i--) {
       const date = new Date(today)
       date.setDate(today.getDate() - i)
-      dates.push(date.toISOString().split('T')[0])
+      dates.push(getLocalDateString(date))
     }
 
     return dates
-  }
+  }, [])
 
   // 获取热力图数据
-  const fetchHeatmapData = async () => {
+  const fetchHeatmapData = useCallback(async () => {
     try {
       setLoading(true)
       const dates = generateDateRange()
@@ -75,11 +76,11 @@ export function HabitHeatmap({ className }: HabitHeatmapProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [generateDateRange])
 
   useEffect(() => {
-    fetchHeatmapData()
-  }, [])
+    void fetchHeatmapData()
+  }, [fetchHeatmapData])
 
   // 格式化日期显示
   const formatDate = (dateStr: string) => {
@@ -140,6 +141,8 @@ export function HabitHeatmap({ className }: HabitHeatmapProps) {
     )
   }
 
+  const todayStr = getLocalDateString()
+
   return (
     <div className={`bg-white rounded-lg border p-4 ${className}`}>
       <div className="flex justify-between items-center mb-3">
@@ -179,7 +182,7 @@ export function HabitHeatmap({ className }: HabitHeatmapProps) {
             <div className="flex gap-1">
               {dateRange.map((date) => {
                 const hasRecord = habit.records[date] || false
-                const isToday = date === new Date().toISOString().split('T')[0]
+                const isToday = date === todayStr
 
                 return (
                   <div

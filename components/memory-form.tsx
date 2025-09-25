@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { X, Loader2, Upload, Image } from "lucide-react"
+import { X, Loader2, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import Image from "next/image"
 
 interface MemoryFormProps {
   onMemoryAdded?: () => void
@@ -317,11 +318,14 @@ export function MemoryForm({ onMemoryAdded, onClose, editMemory }: MemoryFormPro
                   <h4 className="text-sm font-medium mb-2">新选择的照片:</h4>
                   <div className="grid grid-cols-3 gap-2">
                     {selectedFiles.map((file, index) => (
-                      <div key={index} className="relative">
-                        <img
+                      <div key={index} className="relative h-20">
+                        <Image
                           src={URL.createObjectURL(file)}
                           alt={`Preview ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
+                          fill
+                          sizes="150px"
+                          className="object-cover rounded"
+                          unoptimized
                         />
                         <Button
                           type="button"
@@ -344,11 +348,14 @@ export function MemoryForm({ onMemoryAdded, onClose, editMemory }: MemoryFormPro
                   <h4 className="text-sm font-medium mb-2">已有照片:</h4>
                   <div className="grid grid-cols-3 gap-2">
                     {uploadedPhotos.map((photo, index) => (
-                      <div key={index} className="relative">
-                        <img
+                      <div key={index} className="relative h-20">
+                        <Image
                           src={photo}
                           alt={`Uploaded ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
+                          fill
+                          sizes="150px"
+                          className="object-cover rounded"
+                          unoptimized
                         />
                         <Button
                           type="button"
