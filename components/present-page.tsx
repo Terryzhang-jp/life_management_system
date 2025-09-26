@@ -6,7 +6,7 @@ import { Responsive, WidthProvider, Layout, Layouts } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { Card } from "@/components/ui/card"
-import { type LucideIcon, Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb, Calendar, GripVertical } from "lucide-react"
+import { type LucideIcon, Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb, Calendar, GripVertical, Brain } from "lucide-react"
 import AnalogClock from "@/components/analog-clock"
 import { HabitTracker } from "@/components/habit-tracker"
 import { DailyDecisions } from "@/components/daily-decisions"
@@ -373,12 +373,20 @@ export default function PresentPage() {
         </div>
 
         {/* 快捷导航 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <Link href="/schedule">
             <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-blue-200 bg-blue-50">
               <div className="flex flex-col items-center">
                 <Calendar className="w-6 h-6 mb-2 text-blue-600" />
                 <span className="text-sm text-blue-700 font-medium">日程安排</span>
+              </div>
+            </Card>
+          </Link>
+          <Link href="/mental-models">
+            <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-purple-200 bg-purple-50">
+              <div className="flex flex-col items-center">
+                <Brain className="w-6 h-6 mb-2 text-purple-600" />
+                <span className="text-sm text-purple-700 font-medium">心智模型</span>
               </div>
             </Card>
           </Link>

@@ -1,0 +1,38 @@
+/* Excalidraw 样式修复 */
+.excalidraw {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.excalidraw .App-menu {
+  width: auto !important;
+  min-width: 60px !important;
+  max-width: 200px !important;
+}
+
+.excalidraw .App-toolbar {
+  flex-shrink: 0 !important;
+}
+
+.excalidraw .App-canvas {
+  flex-grow: 1 !important;
+  width: auto !important;
+}
+
+/* 确保工具栏不会过度展开 */
+.excalidraw .App-menu__left {
+  width: auto !important;
+  min-width: 60px !important;
+}
+
+/* 修复中文字体显示 */
+.excalidraw {
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+
+/* 确保画布占满剩余空间 */
+.excalidraw .App-canvas-container {
+  flex: 1 !important;
+  width: auto !important;
+  height: 100% !important;
+}

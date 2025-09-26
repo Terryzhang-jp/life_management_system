@@ -83,3 +83,43 @@
     -webkit-line-clamp: 3;
   }
 }
+
+/* Excalidraw 布局修复 */
+.excalidraw-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.excalidraw-wrapper .excalidraw {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.excalidraw-wrapper .App-menu {
+  width: auto !important;
+  min-width: 60px !important;
+  max-width: 120px !important;
+}
+
+.excalidraw-wrapper .App-menu__left {
+  width: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.excalidraw-wrapper .App-canvas {
+  flex: 1 !important;
+  width: auto !important;
+}
+
+/* 修复工具栏布局 */
+.excalidraw-wrapper .Island {
+  max-width: none !important;
+}
+
+/* 确保画布容器正确布局 */
+.excalidraw-wrapper .App {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: row !important;
+}
