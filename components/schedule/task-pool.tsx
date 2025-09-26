@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -71,10 +71,9 @@ interface TaskGroup {
 interface DraggableTaskProps {
   task: Task
   isSchedulable: boolean
-  categories: TaskCategory[]
 }
 
-function DraggableTask({ task, isSchedulable, categories }: DraggableTaskProps) {
+function DraggableTask({ task, isSchedulable }: DraggableTaskProps) {
   const {
     attributes,
     listeners,
@@ -105,11 +104,6 @@ function DraggableTask({ task, isSchedulable, categories }: DraggableTaskProps) 
 
   // Get urgency level for this task's deadline
   const urgency = task.deadline ? getDueDateUrgency(task.deadline) : 'none'
-
-  // Get category information
-  const taskCategory = task.categoryId
-    ? categories.find(category => category.id === task.categoryId)
-    : null
 
   // Determine background color based on urgency
   const getTaskBackgroundClass = () => {
@@ -156,14 +150,6 @@ function DraggableTask({ task, isSchedulable, categories }: DraggableTaskProps) 
             </Badge>
           )}
 
-          {taskCategory && (
-            <Badge
-              className="text-xs text-white font-medium"
-              style={{ backgroundColor: taskCategory.color }}
-            >
-              {taskCategory.name}
-            </Badge>
-          )}
         </div>
 
         {task.deadline && (
@@ -199,9 +185,10 @@ interface TaskPoolProps {
   categories?: TaskCategory[]
   selectedCategoryFilter?: number | null
   onCategoryFilterChange?: (categoryId: number | null) => void
+  refreshToken?: number
 }
 
-export function TaskPool({ className, categories = [], selectedCategoryFilter, onCategoryFilterChange }: TaskPoolProps) {
+export function TaskPool({ className, categories = [], selectedCategoryFilter, onCategoryFilterChange, refreshToken = 0 }: TaskPoolProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set())
@@ -234,12 +221,8 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
     return dueTasks.filter(task => task.categoryId === selectedCategoryFilter)
   }, [dueTasks, selectedCategoryFilter])
 
-  useEffect(() => {
-    fetchSchedulableTasks()
-    fetchDueTasks()
-  }, [])
-
-  const fetchDueTasks = async () => {
+  const fetchDueTasks = useCallback(async () => {
+    setDueTasksLoading(true)
     try {
       const response = await fetch('/api/tasks/due-soon?days=2')
       if (!response.ok) {
@@ -259,7 +242,7 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
     } finally {
       setDueTasksLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     // Group tasks by main task (grandparent for level 2, parent for level 1)
@@ -319,7 +302,8 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
     setTaskGroups(Object.values(groups))
   }, [tasks])
 
-  const fetchSchedulableTasks = async () => {
+  const fetchSchedulableTasks = useCallback(async () => {
+    setLoading(true)
     try {
       const response = await fetch('/api/tasks/schedulable')
       if (!response.ok) {
@@ -340,7 +324,12 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void fetchSchedulableTasks()
+    void fetchDueTasks()
+  }, [fetchSchedulableTasks, fetchDueTasks, refreshToken])
 
   const toggleGroup = (groupId: number) => {
     const newExpanded = new Set(expandedGroups)
@@ -495,7 +484,6 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
                           key={task.id}
                           task={task}
                           isSchedulable={true}
-                          categories={categories}
                         />
                       ))}
                     </div>

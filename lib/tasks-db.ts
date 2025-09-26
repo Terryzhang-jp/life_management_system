@@ -69,6 +69,7 @@ class TasksDatabaseManager {
       }
 
       this.db = new Database(this.dbPath)
+      this.db.pragma('foreign_keys = ON')
       this.initTables()
     }
     return this.db

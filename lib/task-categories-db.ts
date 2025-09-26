@@ -163,12 +163,14 @@ class TaskCategoriesDatabaseManager {
 
     // 级联更新：将使用该分类的任务重置为无分类
     const tasksDb = new Database(path.join(process.cwd(), 'data', 'tasks.db'))
+    tasksDb.pragma('foreign_keys = ON')
     const updateTasksStmt = tasksDb.prepare('UPDATE tasks SET category_id = NULL WHERE category_id = ?')
     const tasksUpdated = updateTasksStmt.run(id)
     tasksDb.close()
 
     // 级联更新：将使用该分类的日程重置为无分类
     const scheduleDb = new Database(path.join(process.cwd(), 'data', 'schedule.db'))
+    scheduleDb.pragma('foreign_keys = ON')
     const updateScheduleStmt = scheduleDb.prepare(`
       UPDATE schedule_blocks
       SET category_id = NULL, category_name = NULL, category_color = NULL, updated_at = CURRENT_TIMESTAMP

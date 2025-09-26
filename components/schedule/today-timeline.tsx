@@ -71,15 +71,9 @@ export function TodayTimeline() {
     }
   }, [])
 
-  const actionableBlocks = useMemo(() => {
-    return blocks
-      .filter(block => block.status !== "completed" && block.status !== "cancelled")
-      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+  const sortedBlocks = useMemo(() => {
+    return [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime))
   }, [blocks])
-
-  const MAX_DISPLAY = 5
-  const displayBlocks = actionableBlocks.slice(0, MAX_DISPLAY)
-  const hasMore = actionableBlocks.length > MAX_DISPLAY
 
   const renderContent = () => {
     if (loading) {
@@ -100,10 +94,10 @@ export function TodayTimeline() {
       )
     }
 
-    if (actionableBlocks.length === 0) {
+    if (sortedBlocks.length === 0) {
       return (
         <div className="text-sm text-gray-500">
-          今天没有待办安排。
+          今天还没有安排。
         </div>
       )
     }
@@ -111,8 +105,8 @@ export function TodayTimeline() {
     const now = new Date()
 
     return (
-      <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-        {displayBlocks.map(block => {
+      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+        {sortedBlocks.map(block => {
           const start = new Date(`${block.date}T${block.startTime}`)
           const end = new Date(`${block.date}T${block.endTime}`)
           const isCurrent = now >= start && now <= end
@@ -165,11 +159,6 @@ export function TodayTimeline() {
             </div>
           )
         })}
-        {hasMore && (
-          <div className="pl-3 text-[11px] uppercase tracking-wide text-gray-400">
-            仅展示前 {MAX_DISPLAY} 项
-          </div>
-        )}
       </div>
     )
   }
@@ -181,7 +170,7 @@ export function TodayTimeline() {
           今日时间线
         </CardTitle>
         <CardDescription className="text-xs text-gray-500">
-          仅展示今日尚未完成的安排
+          展示今日全部时间安排
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 pt-0">

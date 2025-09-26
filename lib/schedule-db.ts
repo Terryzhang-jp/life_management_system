@@ -86,6 +86,21 @@ export interface WeekSchedule {
   [date: string]: ScheduleBlock[]
 }
 
+export interface DailyCategorySummary {
+  categoryId?: number
+  categoryName: string
+  categoryColor?: string
+  plannedMinutes: number
+  effectiveMinutes: number
+}
+
+export interface DailyScheduleSummary {
+  date: string
+  totalPlannedMinutes: number
+  totalEffectiveMinutes: number
+  categories: DailyCategorySummary[]
+}
+
 interface PastIncompleteOptions {
   sinceDate?: string
   limit?: number
@@ -187,6 +202,70 @@ export function getScheduleBlockById(id: number): ScheduleBlock | null {
     categoryColor: row.categoryColor || undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
+  }
+}
+
+const EFFECTIVE_STATUSES = new Set(['completed', 'in_progress', 'partially_completed'])
+const PLANNED_STATUSES = new Set(['scheduled', 'in_progress', 'partially_completed', 'completed'])
+
+function calculateDurationMinutes(startTime: string, endTime: string): number {
+  const [startHour, startMinute] = startTime.split(':').map(Number)
+  const [endHour, endMinute] = endTime.split(':').map(Number)
+  const startTotal = startHour * 60 + startMinute
+  const endTotal = endHour * 60 + endMinute
+  const duration = endTotal - startTotal
+  return duration > 0 ? duration : 0
+}
+
+export function getDailyScheduleSummary(date: string): DailyScheduleSummary {
+  const blocks = getScheduleByDate(date)
+
+  let totalPlannedMinutes = 0
+  let totalEffectiveMinutes = 0
+  const categoryMap = new Map<string, DailyCategorySummary>()
+
+  blocks.forEach(block => {
+    const duration = calculateDurationMinutes(block.startTime, block.endTime)
+    const isPlanned = PLANNED_STATUSES.has(block.status)
+    const isEffective = EFFECTIVE_STATUSES.has(block.status)
+
+    if (!isPlanned && !isEffective) {
+      return
+    }
+
+    const categoryKey = block.categoryId ? `id_${block.categoryId}` : `name_${block.categoryName || '未分类'}`
+    const categoryName = block.categoryName || '未分类'
+
+    if (!categoryMap.has(categoryKey)) {
+      categoryMap.set(categoryKey, {
+        categoryId: block.categoryId ?? undefined,
+        categoryName,
+        categoryColor: block.categoryColor ?? undefined,
+        plannedMinutes: 0,
+        effectiveMinutes: 0
+      })
+    }
+
+    const summary = categoryMap.get(categoryKey)!
+
+    if (isPlanned) {
+      summary.plannedMinutes += duration
+      totalPlannedMinutes += duration
+    }
+
+    if (isEffective) {
+      summary.effectiveMinutes += duration
+      totalEffectiveMinutes += duration
+    }
+  })
+
+  const categories = Array.from(categoryMap.values()).sort((a, b) => b.plannedMinutes - a.plannedMinutes)
+
+  return {
+    date,
+    totalPlannedMinutes,
+    totalEffectiveMinutes,
+    categories
   }
 }
 

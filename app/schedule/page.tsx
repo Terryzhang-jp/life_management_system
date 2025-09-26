@@ -16,9 +16,10 @@ import { RoutinePool } from '@/components/schedule/routine-pool'
 import { TimelineWeekView } from '@/components/schedule/timeline-week-view'
 import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
+import { QuickTaskCreateModal } from '@/components/schedule/quick-task-create-modal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Clock } from 'lucide-react'
+import { ArrowLeft, Clock, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { WeekSchedule, ScheduleBlock } from '@/lib/schedule-db'
@@ -65,6 +66,8 @@ export default function SchedulePage() {
   const [quickCreateMode, setQuickCreateMode] = useState(false)  // New state for quick create
   const [categories, setCategories] = useState<TaskCategory[]>([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null)
+  const [quickTaskModalOpen, setQuickTaskModalOpen] = useState(false)
+  const [taskPoolRefreshToken, setTaskPoolRefreshToken] = useState(0)
 
   // Configure drag and drop sensors
   const mouseSensor = useSensor(MouseSensor, {
@@ -335,6 +338,15 @@ export default function SchedulePage() {
     setTimeModalOpen(true)
   }
 
+  const handleQuickTaskCreated = (taskTitle: string) => {
+    setQuickTaskModalOpen(false)
+    setTaskPoolRefreshToken(prev => prev + 1)
+    toast({
+      title: "成功",
+      description: `已创建任务「${taskTitle}」`
+    })
+  }
+
   const handleUpdateBlockStatus = async (blockId: number, status: ScheduleBlock['status']) => {
     try {
       const response = await fetch(`/api/schedule/blocks?id=${blockId}`, {
@@ -526,6 +538,7 @@ export default function SchedulePage() {
                 categories={categories}
                 selectedCategoryFilter={selectedCategoryFilter}
                 onCategoryFilterChange={setSelectedCategoryFilter}
+                refreshToken={taskPoolRefreshToken}
               />
               <RoutinePool />
             </div>
@@ -534,7 +547,14 @@ export default function SchedulePage() {
           {/* Right Panel - Timeline Week View */}
           <div className="lg:col-span-3 space-y-4">
             {/* Quick Navigation */}
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-3">
+              <Button
+                onClick={() => setQuickTaskModalOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                快速添加任务
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => {
@@ -623,6 +643,12 @@ export default function SchedulePage() {
           suggestedStartTime={suggestedStartTime}
           suggestedEndTime={suggestedEndTime}
           quickCreate={quickCreateMode}
+        />
+
+        <QuickTaskCreateModal
+          isOpen={quickTaskModalOpen}
+          onClose={() => setQuickTaskModalOpen(false)}
+          onCreated={handleQuickTaskCreated}
         />
 
         {/* Day View Modal */}
