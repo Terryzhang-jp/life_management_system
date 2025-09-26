@@ -82,10 +82,14 @@ export default function SchedulePage() {
 
   // Initialize current week
   useEffect(() => {
-    const today = new Date()
+    // 使用getLocalDateString确保时区一致性
+    const { getLocalDateString } = require('@/lib/date-utils')
+    const todayStr = getLocalDateString() // 使用本地时区的今日日期
+    const today = new Date(todayStr + 'T12:00:00') // 中午时间避免时区问题
     const day = today.getDay()
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1) // Get Monday
-    const monday = new Date(today.setDate(diff))
+    const diff = day === 0 ? -6 : 1 - day // Get Monday (周日的话往前6天，其他往前到周一)
+    const monday = new Date(today)
+    monday.setDate(monday.getDate() + diff)
     const weekStart = monday.toISOString().split('T')[0]
     setCurrentWeekStart(weekStart)
   }, [])
@@ -534,10 +538,14 @@ export default function SchedulePage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  const today = new Date()
+                  // 使用与初始化一致的时区处理方法
+                  const { getLocalDateString } = require('@/lib/date-utils')
+                  const todayStr = getLocalDateString() // 使用本地时区的今日日期
+                  const today = new Date(todayStr + 'T12:00:00') // 中午时间避免时区问题
                   const day = today.getDay()
-                  const diff = today.getDate() - day + (day === 0 ? -6 : 1) // Get Monday
-                  const monday = new Date(today.setDate(diff))
+                  const diff = day === 0 ? -6 : 1 - day // Get Monday (周日的话往前6天，其他往前到周一)
+                  const monday = new Date(today)
+                  monday.setDate(monday.getDate() + diff)
                   const weekStart = monday.toISOString().split('T')[0]
                   setCurrentWeekStart(weekStart)
                 }}

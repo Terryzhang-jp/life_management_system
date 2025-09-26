@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { X, Clock, Calendar, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScheduleBlock } from '@/lib/schedule-db'
+import { getLocalDateString } from '@/lib/date-utils'
 
 interface Task {
   id: number
@@ -108,7 +109,7 @@ export function TimeSettingModal({
   }, [isOpen, mode, existingBlock, task, suggestedStartTime, suggestedEndTime])
 
   const checkConflicts = useCallback(async () => {
-    if (!startTime || !endTime || startTime >= endTime) return
+    if (!date || !startTime || !endTime || startTime >= endTime) return
 
     setChecking(true)
     try {
@@ -130,18 +131,26 @@ export function TimeSettingModal({
 
   // Check conflicts when time changes
   useEffect(() => {
+    if (!isOpen || !date) {
+      return
+    }
+
     if (startTime && endTime && startTime < endTime) {
       void checkConflicts()
     }
-  }, [checkConflicts, endTime, startTime])
+  }, [checkConflicts, date, endTime, isOpen, startTime])
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const today = new Date()
-    const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (!dateStr) return '未选择日期'
 
-    const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()]
-    const dateFormat = `${date.getMonth() + 1}/${date.getDate()}`
+    const targetDate = new Date(`${dateStr}T12:00:00`)
+    const todayStr = getLocalDateString()
+    const today = new Date(`${todayStr}T12:00:00`)
+    const diffMs = targetDate.getTime() - today.getTime()
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+    const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][targetDate.getDay()]
+    const dateFormat = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`
 
     if (diffDays === 0) return `${dateFormat} (今天) 周${dayOfWeek}`
     if (diffDays === 1) return `${dateFormat} (明天) 周${dayOfWeek}`
@@ -232,7 +241,6 @@ export function TimeSettingModal({
   }
 
   if (!isOpen) {
-    console.log('TimeSettingModal not rendering:', { isOpen })
     return null
   }
 

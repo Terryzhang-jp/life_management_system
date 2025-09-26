@@ -1107,6 +1107,9 @@ export default function TasksPage() {
     const [editDescription, setEditDescription] = useState(subTask.description || "")
     const [editPriority, setEditPriority] = useState(subTask.priority || 999)
     const [editDeadline, setEditDeadline] = useState(subTask.deadline)
+    const inheritedCategory = subTask.categoryId
+      ? categories.find(category => category.id === subTask.categoryId)
+      : null
 
     const handleSave = () => {
       onSave(editTitle, editDescription, editPriority, editDeadline)
@@ -1159,6 +1162,11 @@ export default function TasksPage() {
               className="flex-1"
             />
           </div>
+          {inheritedCategory && (
+            <p className="text-xs text-gray-500">
+              分类: {inheritedCategory.name}（继承）
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -1198,6 +1206,9 @@ export default function TasksPage() {
     const [editDescription, setEditDescription] = useState(subSubTask.description || "")
     const [editPriority, setEditPriority] = useState(subSubTask.priority || 999)
     const [editDeadline, setEditDeadline] = useState(subSubTask.deadline)
+    const inheritedCategory = subSubTask.categoryId
+      ? categories.find(category => category.id === subSubTask.categoryId)
+      : null
 
     const handleSave = () => {
       onSave(editTitle, editDescription, editPriority, editDeadline)
@@ -1250,6 +1261,11 @@ export default function TasksPage() {
               className="flex-1"
             />
           </div>
+          {inheritedCategory && (
+            <p className="text-xs text-gray-500">
+              分类: {inheritedCategory.name}（继承）
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -1421,6 +1437,9 @@ export default function TasksPage() {
                   <div className="space-y-2">
                     {subTasks.map((subTask) => {
                       const isEditing = editingSubTask?.id === subTask.id
+                      const subTaskCategory = subTask.categoryId
+                        ? categories.find(category => category.id === subTask.categoryId)
+                        : null
 
                       if (isEditing) {
                         return (
@@ -1486,6 +1505,15 @@ export default function TasksPage() {
                                   {subTask.hasUnclearChildren && (
                                     <span title="此任务有模糊的子任务">
                                       <HelpCircle className="h-4 w-4 text-yellow-500" />
+                                    </span>
+                                  )}
+                                  {subTaskCategory && (
+                                    <span
+                                      className="text-[10px] px-2 py-0.5 rounded-full font-medium text-white"
+                                      style={{ backgroundColor: subTaskCategory.color }}
+                                      title={`分类: ${subTaskCategory.name}`}
+                                    >
+                                      {subTaskCategory.name}
                                     </span>
                                   )}
                                   {isCompleted && subTask.completion?.completionComment && (
@@ -1615,6 +1643,9 @@ export default function TasksPage() {
                       subSubTasks.length > 0 ? (
                         subSubTasks.map((subSubTask) => {
                           const isEditing = editingSubSubTask?.id === subSubTask.id
+                          const subSubTaskCategory = subSubTask.categoryId
+                            ? categories.find(category => category.id === subSubTask.categoryId)
+                            : null
 
                           if (isEditing) {
                             return (
@@ -1669,6 +1700,15 @@ export default function TasksPage() {
                                         <div className="text-orange-500" title={subSubTask.unclearReason || '该任务标记为模糊'}>
                                           <HelpCircle className="h-3 w-3" />
                                         </div>
+                                      )}
+                                      {subSubTaskCategory && (
+                                        <span
+                                          className="text-[10px] px-2 py-0.5 rounded-full font-medium text-white"
+                                          style={{ backgroundColor: subSubTaskCategory.color }}
+                                          title={`分类: ${subSubTaskCategory.name}`}
+                                        >
+                                          {subSubTaskCategory.name}
+                                        </span>
                                       )}
                                       {isCompleted && subSubTask.completion?.completionComment && (
                                         <span title={`完成感悟: ${subSubTask.completion.completionComment}`}>

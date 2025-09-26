@@ -161,17 +161,29 @@ class TaskCategoriesDatabaseManager {
   deleteCategory(id: number): boolean {
     const db = this.getDb()
 
-    // 检查是否有任务在使用这个分类
+    // 级联更新：将使用该分类的任务重置为无分类
     const tasksDb = new Database(path.join(process.cwd(), 'data', 'tasks.db'))
-    const tasksCount = tasksDb.prepare('SELECT COUNT(*) as count FROM tasks WHERE category_id = ?').get(id) as { count: number }
+    const updateTasksStmt = tasksDb.prepare('UPDATE tasks SET category_id = NULL WHERE category_id = ?')
+    const tasksUpdated = updateTasksStmt.run(id)
     tasksDb.close()
 
-    if (tasksCount.count > 0) {
-      throw new Error(`该分类下还有 ${tasksCount.count} 个任务，请先修改这些任务的分类`)
-    }
+    // 级联更新：将使用该分类的日程重置为无分类
+    const scheduleDb = new Database(path.join(process.cwd(), 'data', 'schedule.db'))
+    const updateScheduleStmt = scheduleDb.prepare(`
+      UPDATE schedule_blocks
+      SET category_id = NULL, category_name = NULL, category_color = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE category_id = ?
+    `)
+    const scheduleUpdated = updateScheduleStmt.run(id)
+    scheduleDb.close()
 
+    // 删除分类
     const stmt = db.prepare('DELETE FROM task_categories WHERE id = ?')
     const result = stmt.run(id)
+
+    // 记录更新的数量（可选，用于调试）
+    console.log(`删除分类 ${id}：更新了 ${tasksUpdated.changes} 个任务，${scheduleUpdated.changes} 个日程`)
+
     return result.changes > 0
   }
 

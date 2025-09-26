@@ -34,6 +34,32 @@ class TasksDatabaseManager {
     this.dbPath = path.join(process.cwd(), 'data', 'tasks.db')
   }
 
+  private resolveInheritedCategory(db: Database.Database, taskId?: number): number | null {
+    if (!taskId) {
+      return null
+    }
+
+    const stmt = db.prepare(`
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id, category_id, 0 AS depth
+        FROM tasks
+        WHERE id = ?
+        UNION ALL
+        SELECT t.id, t.parent_id, t.category_id, a.depth + 1
+        FROM tasks t
+        INNER JOIN ancestors a ON t.id = a.parent_id
+      )
+      SELECT category_id
+      FROM ancestors
+      WHERE category_id IS NOT NULL
+      ORDER BY depth ASC
+      LIMIT 1
+    `)
+
+    const row = stmt.get(taskId) as { category_id: number | null } | undefined
+    return row?.category_id ?? null
+  }
+
   private getDb() {
     if (!this.db) {
       const fs = require('fs')
@@ -126,7 +152,7 @@ class TasksDatabaseManager {
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
       hasUnclearChildren: Boolean(hasUnclearChildrenRow),
-      categoryId: row.category_id || undefined,
+      categoryId: (row.category_id ?? this.resolveInheritedCategory(db, row.parent_id)) || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -183,6 +209,7 @@ class TasksDatabaseManager {
 
   async addTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const db = this.getDb()
+    const categoryId = task.categoryId ?? this.resolveInheritedCategory(db, task.parentId) ?? null
     const result = db.prepare(`
       INSERT INTO tasks (type, title, description, priority, parent_id, level, deadline, is_unclear, unclear_reason, category_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -196,7 +223,7 @@ class TasksDatabaseManager {
       task.deadline || null,
       task.isUnclear ? 1 : 0,
       task.unclearReason || '',
-      task.categoryId || null
+      categoryId
     )
 
     return result.lastInsertRowid as number
@@ -270,9 +297,15 @@ class TasksDatabaseManager {
   async getSubTasks(parentId: number, level: number = 1): Promise<Task[]> {
     const db = this.getDb()
     const rows = db.prepare(`
-      SELECT * FROM tasks
-      WHERE parent_id = ? AND level = ?
-      ORDER BY priority ASC, created_at DESC
+      SELECT
+        t.*,
+        p.category_id AS parent_category_id,
+        gp.category_id AS grandparent_category_id
+      FROM tasks t
+      LEFT JOIN tasks p ON t.parent_id = p.id
+      LEFT JOIN tasks gp ON p.parent_id = gp.id
+      WHERE t.parent_id = ? AND t.level = ?
+      ORDER BY t.priority ASC, t.created_at DESC
     `).all(parentId, level) as any[]
 
     return rows.map(row => ({
@@ -286,7 +319,7 @@ class TasksDatabaseManager {
       deadline: row.deadline || undefined,
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
-      categoryId: row.category_id || undefined,
+      categoryId: (row.category_id ?? row.parent_category_id ?? row.grandparent_category_id) || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }))
@@ -316,7 +349,7 @@ class TasksDatabaseManager {
       deadline: row.deadline || undefined,
       isUnclear: Boolean(row.is_unclear),
       unclearReason: row.unclear_reason || '',
-      categoryId: row.category_id || undefined,
+      categoryId: (row.category_id ?? this.resolveInheritedCategory(db, row.parent_id)) || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }))
@@ -407,7 +440,9 @@ export function getAllSchedulableTasks() {
       t.parent_id as parentId,
       p.title as parentTitle,
       p.parent_id as grandparentId,
-      gp.title as grandparentTitle
+      gp.title as grandparentTitle,
+      p.category_id as parentCategoryId,
+      gp.category_id as grandparentCategoryId
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     LEFT JOIN tasks gp ON p.parent_id = gp.id
@@ -432,7 +467,8 @@ export function getAllSchedulableTasks() {
       t.parent_id as parentId,
       p.title as parentTitle,
       NULL as grandparentId,
-      NULL as grandparentTitle
+      NULL as grandparentTitle,
+      p.category_id as parentCategoryId
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     WHERE t.level = 1
@@ -447,7 +483,12 @@ export function getAllSchedulableTasks() {
       t.created_at
   `).all()
 
-  const allTasks = [...level2Tasks, ...level1TasksWithoutChildren]
+  const normalizeCategory = (task: any) => ({
+    ...task,
+    categoryId: task.categoryId ?? task.parentCategoryId ?? task.grandparentCategoryId ?? null
+  })
+
+  const allTasks = [...level2Tasks.map(normalizeCategory), ...level1TasksWithoutChildren.map(normalizeCategory)]
 
   if (allTasks.length === 0) {
     return []
@@ -505,7 +546,9 @@ export function getSchedulableRoutines() {
       t.parent_id as parentId,
       p.title as parentTitle,
       p.parent_id as grandparentId,
-      gp.title as grandparentTitle
+      gp.title as grandparentTitle,
+      p.category_id as parentCategoryId,
+      gp.category_id as grandparentCategoryId
     FROM tasks t
     INNER JOIN tasks p ON t.parent_id = p.id
     INNER JOIN tasks gp ON p.parent_id = gp.id AND gp.type = 'routine'
@@ -554,7 +597,8 @@ export function getSchedulableRoutines() {
       t.parent_id as parentId,
       p.title as parentTitle,
       NULL as grandparentId,
-      NULL as grandparentTitle
+      NULL as grandparentTitle,
+      p.category_id as parentCategoryId
     FROM tasks t
     INNER JOIN tasks p ON t.parent_id = p.id AND p.type = 'routine'
     WHERE t.level = 1
@@ -614,7 +658,18 @@ export function getSchedulableRoutines() {
     ORDER BY t.priority, t.created_at
   `).all()
 
-  const allRoutines = [...routineLevel2Tasks, ...orphanedRoutineLevel2Tasks, ...routineLevel1TasksWithoutChildren, ...orphanedRoutineLevel1Tasks, ...routineLevel0TasksWithoutChildren]
+  const normalizeRoutineCategory = (task: any) => ({
+    ...task,
+    categoryId: task.categoryId ?? task.parentCategoryId ?? task.grandparentCategoryId ?? null
+  })
+
+  const allRoutines = [
+    ...routineLevel2Tasks.map(normalizeRoutineCategory),
+    ...orphanedRoutineLevel2Tasks.map(normalizeRoutineCategory),
+    ...routineLevel1TasksWithoutChildren.map(normalizeRoutineCategory),
+    ...orphanedRoutineLevel1Tasks.map(normalizeRoutineCategory),
+    ...routineLevel0TasksWithoutChildren.map(normalizeRoutineCategory)
+  ]
 
   if (allRoutines.length === 0) {
     return []
@@ -668,7 +723,9 @@ export function getTasksDueSoon(days: number = 2) {
       t.parent_id as parentId,
       p.title as parentTitle,
       p.parent_id as grandparentId,
-      gp.title as grandparentTitle
+      gp.title as grandparentTitle,
+      p.category_id as parentCategoryId,
+      gp.category_id as grandparentCategoryId
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     LEFT JOIN tasks gp ON p.parent_id = gp.id
@@ -692,7 +749,8 @@ export function getTasksDueSoon(days: number = 2) {
       t.parent_id as parentId,
       p.title as parentTitle,
       NULL as grandparentId,
-      NULL as grandparentTitle
+      NULL as grandparentTitle,
+      p.category_id as parentCategoryId
     FROM tasks t
     LEFT JOIN tasks p ON t.parent_id = p.id
     WHERE t.level = 1
@@ -705,7 +763,12 @@ export function getTasksDueSoon(days: number = 2) {
     ORDER BY t.deadline ASC, t.priority
   `).all(todayStr, targetDateStr)
 
-  const allDueTasks = [...level2TasksDue, ...level1TasksDue]
+  const normalizeDueTask = (task: any) => ({
+    ...task,
+    categoryId: task.categoryId ?? task.parentCategoryId ?? task.grandparentCategoryId ?? null
+  })
+
+  const allDueTasks = [...level2TasksDue.map(normalizeDueTask), ...level1TasksDue.map(normalizeDueTask)]
 
   if (allDueTasks.length === 0) {
     return []

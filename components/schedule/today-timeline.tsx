@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { getLocalDateString } from "@/lib/date-utils"
 
 type ScheduleStatus = "scheduled" | "in_progress" | "partially_completed" | "completed" | "cancelled"
 
@@ -39,7 +40,7 @@ export function TodayTimeline() {
         setLoading(true)
         setError(null)
 
-        const today = new Date().toISOString().split("T")[0]
+        const today = getLocalDateString()
         const response = await fetch(`/api/schedule/day?date=${today}`)
 
         if (!response.ok) {

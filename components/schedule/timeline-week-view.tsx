@@ -322,6 +322,8 @@ interface TimelineWeekViewProps {
   className?: string
 }
 
+const toLocalDate = (dateStr: string) => new Date(`${dateStr}T12:00:00`)
+
 export function TimelineWeekView({
   weekSchedule,
   currentWeekStart,
@@ -348,7 +350,7 @@ export function TimelineWeekView({
   // Generate week dates
   const weekDates = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(currentWeekStart)
+      const date = new Date(currentWeekStart + 'T12:00:00') // 中午时间避免时区问题
       date.setDate(date.getDate() + i)
       return date.toISOString().split('T')[0]
     })
@@ -395,8 +397,8 @@ export function TimelineWeekView({
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const formatDateHeader = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const today = new Date().toISOString().split('T')[0]
+    const date = toLocalDate(dateStr)
+    const today = getLocalDateString()
     const dayOfWeek = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()]
     const dateNum = date.getDate()
 
@@ -408,7 +410,7 @@ export function TimelineWeekView({
   }
 
   const formatWeekDisplay = (weekStart: string) => {
-    const start = new Date(weekStart)
+    const start = toLocalDate(weekStart)
     const end = new Date(start)
     end.setDate(end.getDate() + 6)
 

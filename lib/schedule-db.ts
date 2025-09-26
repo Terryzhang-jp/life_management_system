@@ -86,6 +86,11 @@ export interface WeekSchedule {
   [date: string]: ScheduleBlock[]
 }
 
+interface PastIncompleteOptions {
+  sinceDate?: string
+  limit?: number
+}
+
 // Get schedule blocks for a date range
 export function getScheduleByDateRange(startDate: string, endDate: string): ScheduleBlock[] {
   const stmt = db.prepare(`
@@ -138,6 +143,96 @@ export function getScheduleByDate(date: string): ScheduleBlock[] {
   `)
 
   return stmt.all(date) as ScheduleBlock[]
+}
+
+export function getScheduleBlockById(id: number): ScheduleBlock | null {
+  const stmt = db.prepare(`
+    SELECT
+      id,
+      task_id as taskId,
+      date,
+      start_time as startTime,
+      end_time as endTime,
+      comment,
+      status,
+      task_title as taskTitle,
+      parent_title as parentTitle,
+      grandparent_title as grandparentTitle,
+      category_id as categoryId,
+      category_name as categoryName,
+      category_color as categoryColor,
+      created_at as createdAt,
+      updated_at as updatedAt
+    FROM schedule_blocks
+    WHERE id = ?
+    LIMIT 1
+  `)
+
+  const row = stmt.get(id) as any
+  if (!row) return null
+
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    date: row.date,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    comment: row.comment || undefined,
+    status: row.status,
+    taskTitle: row.taskTitle,
+    parentTitle: row.parentTitle || undefined,
+    grandparentTitle: row.grandparentTitle || undefined,
+    categoryId: row.categoryId || undefined,
+    categoryName: row.categoryName || undefined,
+    categoryColor: row.categoryColor || undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+// Get past schedule blocks that are not marked completed or cancelled
+export function getPastIncompleteBlocks(
+  beforeDate: string,
+  options: PastIncompleteOptions = {}
+): ScheduleBlock[] {
+  const { sinceDate, limit = 50 } = options
+
+  const conditions = ['date < ?']
+  const params: (string | number)[] = [beforeDate]
+
+  if (sinceDate) {
+    conditions.push('date >= ?')
+    params.push(sinceDate)
+  }
+
+  const query = `
+    SELECT
+      id,
+      task_id as taskId,
+      date,
+      start_time as startTime,
+      end_time as endTime,
+      comment,
+      status,
+      task_title as taskTitle,
+      parent_title as parentTitle,
+      grandparent_title as grandparentTitle,
+      category_id as categoryId,
+      category_name as categoryName,
+      category_color as categoryColor,
+      created_at as createdAt,
+      updated_at as updatedAt
+    FROM schedule_blocks
+    WHERE ${conditions.join(' AND ')}
+      AND status NOT IN ('completed', 'cancelled')
+    ORDER BY date DESC, start_time ASC
+    LIMIT ?
+  `
+
+  params.push(limit)
+
+  const stmt = db.prepare(query)
+  return stmt.all(...params) as ScheduleBlock[]
 }
 
 // Create a new schedule block

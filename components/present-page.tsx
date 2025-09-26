@@ -26,9 +26,10 @@ import { HabitTracker } from "@/components/habit-tracker"
 import { DailyDecisions } from "@/components/daily-decisions"
 import { ThoughtsAndConcerns } from "@/components/thoughts-and-concerns"
 import { TodayTimeline } from "@/components/schedule/today-timeline"
+import { PastIncompleteList } from "@/components/schedule/past-incomplete-list"
 import { cn } from "@/lib/utils"
 
-type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "timeline"
+type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "timeline" | "pastIncomplete"
 
 interface ModuleConfig {
   id: ModuleKey
@@ -61,6 +62,11 @@ const MODULES: ModuleConfig[] = [
     id: "timeline",
     label: "今日时间线",
     render: () => <TodayTimeline />
+  },
+  {
+    id: "pastIncomplete",
+    label: "过去未完成",
+    render: () => <PastIncompleteList />
   }
 ]
 
