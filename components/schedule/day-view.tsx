@@ -52,7 +52,7 @@ export function DayView({
   }, [blocks])
 
   // Calculate display level based on block height
-  const getDisplayLevel = (heightInPixels: number) => {
+  const getDisplayLevel = (heightInPixels: number): 'minimal' | 'title-only' | 'basic' | 'full' => {
     if (heightInPixels < 25) return 'minimal'      // < 25px: Only show task title
     if (heightInPixels < 45) return 'title-only'   // < 45px: Title only (no time)
     if (heightInPixels < 65) return 'basic'        // < 65px: Title + time
@@ -346,8 +346,7 @@ export function DayView({
                               )}
 
                               {/* Task title with category badge - always show except for 'minimal' */}
-                              {displayLevel !== 'minimal' && (
-                                <div className="flex items-start gap-1 w-full">
+                              <div className="flex items-start gap-1 w-full">
                                   <Tooltip content={block.taskTitle}>
                                     <div className={cn(
                                       "flex-1 font-medium text-gray-900 leading-tight break-words",
@@ -357,7 +356,7 @@ export function DayView({
                                     </div>
                                   </Tooltip>
                                   {/* Category badge for all levels except minimal */}
-                                  {displayLevel !== 'minimal' && getBlockCategory(block) && (
+                                  {getBlockCategory(block) && (
                                     <span
                                       className="text-xs px-1 py-0.5 rounded text-white font-medium flex-shrink-0"
                                       style={{ backgroundColor: getBlockCategory(block)?.color }}
@@ -367,7 +366,6 @@ export function DayView({
                                     </span>
                                   )}
                                 </div>
-                              )}
                             </div>
 
                             {/* Edit and Delete buttons - show for basic and full levels */}

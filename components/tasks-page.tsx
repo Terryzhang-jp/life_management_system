@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2 } from "lucide-react"
+import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2, Palette } from "lucide-react"
 import { DatePicker, DateDisplay } from "@/components/ui/date-picker"
 import { TaskCompletionDialog } from "./task-completion-dialog"
 import TaskCategoryManager from "./task-category-manager"
+import AspirationsCard from "./aspirations-card"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 
@@ -1308,6 +1309,12 @@ export default function TasksPage() {
                   查看完成时间线
                 </Button>
               </Link>
+              <Link href="/whiteboard">
+                <Button variant="outline" size="sm">
+                  <Palette className="w-4 h-4 mr-2" />
+                  思维整理
+                </Button>
+              </Link>
             </div>
             <div className="flex items-center gap-4">
               {/* 分类筛选 */}
@@ -1826,8 +1833,8 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* 任务卡片网格 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 任务卡片 - 第一行3列 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <TaskCard
             title="日常习惯"
             description="终身性的习惯和实践（如：读书、运动）"
@@ -1847,6 +1854,9 @@ export default function TasksPage() {
             type="short-term"
           />
         </div>
+
+        {/* 心愿卡片 - 第二行独立 */}
+        <AspirationsCard />
       </div>
 
       {/* 完成确认对话框 */}

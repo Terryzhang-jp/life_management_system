@@ -6,7 +6,7 @@ import { Responsive, WidthProvider, Layout, Layouts } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { Card } from "@/components/ui/card"
-import { type LucideIcon, Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb, Calendar, GripVertical, Brain } from "lucide-react"
+import { type LucideIcon, Clock, ArrowLeft, ArrowRight, Home, BookOpen, ListTodo, Lightbulb, Calendar, GripVertical, Brain, MessageSquare } from "lucide-react"
 import AnalogClock from "@/components/analog-clock"
 import { HabitTracker } from "@/components/habit-tracker"
 import { DailyDecisions } from "@/components/daily-decisions"
@@ -14,6 +14,8 @@ import { ThoughtsAndConcerns } from "@/components/thoughts-and-concerns"
 import { TodayTimeline } from "@/components/schedule/today-timeline"
 import { PastIncompleteList } from "@/components/schedule/past-incomplete-list"
 import { TodayScheduleSummary } from "@/components/present/today-schedule-summary"
+import DailyReviewButton from "@/components/daily-review/daily-review-button"
+import MinimalCalendar from "@/components/minimal-calendar"
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -29,7 +31,7 @@ const TIMELINE_NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon
   { href: "/future", label: "未来", icon: ArrowRight }
 ]
 
-type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "todaySummary" | "timeline" | "pastIncomplete"
+type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "todaySummary" | "timeline" | "pastIncomplete" | "calendar"
 
 interface ModuleConfig {
   id: ModuleKey
@@ -47,6 +49,11 @@ const MODULES: ModuleConfig[] = [
     id: "decisions",
     label: "今日决策",
     render: () => <DailyDecisions />
+  },
+  {
+    id: "calendar",
+    label: "本月日历",
+    render: () => <MinimalCalendar />
   },
   {
     id: "habits",
@@ -79,16 +86,18 @@ const DEFAULT_LAYOUTS: Layouts = {
   lg: [
     { i: "clock", x: 0, y: 0, w: 4, h: 10, minW: 3, minH: MIN_ROWS },
     { i: "decisions", x: 4, y: 0, w: 4, h: 8, minW: 3, minH: MIN_ROWS },
-    { i: "habits", x: 8, y: 0, w: 4, h: 12, minW: 3, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 10, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 6, y: 10, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 20, w: 6, h: 8, minW: 3, minH: MIN_ROWS },
-    { i: "timeline", x: 6, y: 20, w: 6, h: 14, minW: 4, minH: MIN_ROWS }
+    { i: "calendar", x: 8, y: 0, w: 4, h: 10, minW: 3, minH: MIN_ROWS },
+    { i: "habits", x: 0, y: 10, w: 6, h: 12, minW: 3, minH: MIN_ROWS },
+    { i: "thoughts", x: 6, y: 10, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
+    { i: "pastIncomplete", x: 0, y: 22, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
+    { i: "todaySummary", x: 6, y: 22, w: 6, h: 8, minW: 3, minH: MIN_ROWS },
+    { i: "timeline", x: 0, y: 32, w: 12, h: 14, minW: 4, minH: MIN_ROWS }
   ],
   md: [
     { i: "clock", x: 0, y: 0, w: 5, h: 10, minW: 4, minH: MIN_ROWS },
     { i: "decisions", x: 5, y: 0, w: 5, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 10, w: 10, h: 12, minW: 6, minH: MIN_ROWS },
+    { i: "calendar", x: 0, y: 10, w: 5, h: 10, minW: 4, minH: MIN_ROWS },
+    { i: "habits", x: 5, y: 10, w: 5, h: 12, minW: 4, minH: MIN_ROWS },
     { i: "thoughts", x: 0, y: 22, w: 10, h: 10, minW: 5, minH: MIN_ROWS },
     { i: "pastIncomplete", x: 0, y: 32, w: 10, h: 10, minW: 5, minH: MIN_ROWS },
     { i: "todaySummary", x: 0, y: 42, w: 10, h: 8, minW: 5, minH: MIN_ROWS },
@@ -97,29 +106,32 @@ const DEFAULT_LAYOUTS: Layouts = {
   sm: [
     { i: "clock", x: 0, y: 0, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
     { i: "decisions", x: 0, y: 10, w: 6, h: 8, minW: 6, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 18, w: 6, h: 12, minW: 6, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 30, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 40, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 50, w: 6, h: 8, minW: 6, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 58, w: 6, h: 14, minW: 6, minH: MIN_ROWS }
+    { i: "calendar", x: 0, y: 18, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
+    { i: "habits", x: 0, y: 28, w: 6, h: 12, minW: 6, minH: MIN_ROWS },
+    { i: "thoughts", x: 0, y: 40, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
+    { i: "pastIncomplete", x: 0, y: 50, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
+    { i: "todaySummary", x: 0, y: 60, w: 6, h: 8, minW: 6, minH: MIN_ROWS },
+    { i: "timeline", x: 0, y: 68, w: 6, h: 14, minW: 6, minH: MIN_ROWS }
   ],
   xs: [
     { i: "clock", x: 0, y: 0, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
     { i: "decisions", x: 0, y: 10, w: 4, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 18, w: 4, h: 12, minW: 4, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 30, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 40, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 50, w: 4, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 58, w: 4, h: 14, minW: 4, minH: MIN_ROWS }
+    { i: "calendar", x: 0, y: 18, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
+    { i: "habits", x: 0, y: 28, w: 4, h: 12, minW: 4, minH: MIN_ROWS },
+    { i: "thoughts", x: 0, y: 40, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
+    { i: "pastIncomplete", x: 0, y: 50, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
+    { i: "todaySummary", x: 0, y: 60, w: 4, h: 8, minW: 4, minH: MIN_ROWS },
+    { i: "timeline", x: 0, y: 68, w: 4, h: 14, minW: 4, minH: MIN_ROWS }
   ],
   xxs: [
     { i: "clock", x: 0, y: 0, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
     { i: "decisions", x: 0, y: 10, w: 1, h: 8, minW: 1, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 18, w: 1, h: 12, minW: 1, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 30, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 40, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 50, w: 1, h: 8, minW: 1, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 58, w: 1, h: 14, minW: 1, minH: MIN_ROWS }
+    { i: "calendar", x: 0, y: 18, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
+    { i: "habits", x: 0, y: 28, w: 1, h: 12, minW: 1, minH: MIN_ROWS },
+    { i: "thoughts", x: 0, y: 40, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
+    { i: "pastIncomplete", x: 0, y: 50, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
+    { i: "todaySummary", x: 0, y: 60, w: 1, h: 8, minW: 1, minH: MIN_ROWS },
+    { i: "timeline", x: 0, y: 68, w: 1, h: 14, minW: 1, minH: MIN_ROWS }
   ]
 }
 
@@ -135,8 +147,8 @@ function sanitizeLayouts(layouts: Layouts | undefined): Layouts {
     const defaultLookup = Object.fromEntries(defaultLayout.map(item => [item.i, item]))
     const storedLayout = layouts[breakpoint] ?? []
 
-    const filtered = storedLayout.filter(item => moduleSet.has(item.i))
-    const seen = new Set(filtered.map(item => item.i))
+    const filtered = storedLayout.filter(item => moduleSet.has(item.i as ModuleKey))
+    const seen = new Set(filtered.map(item => item.i as ModuleKey))
 
     const merged = [...filtered]
     MODULE_IDS.forEach(moduleId => {
@@ -200,32 +212,75 @@ function ModuleContainer({ id, label, children, onHeightChange }: ModuleContaine
 export default function PresentPage() {
   const [layouts, setLayouts] = useState<Layouts>(DEFAULT_LAYOUTS)
   const [mounted, setMounted] = useState(false)
-  const lastKnownRows = useRef<Record<ModuleKey, number>>({})
+  const lastKnownRows = useRef<Partial<Record<ModuleKey, number>>>({})
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    try {
-      const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored) as Layouts
-        setLayouts(sanitizeLayouts(parsed))
+    const loadLayouts = async () => {
+      try {
+        // 优先从数据库加载
+        const response = await fetch('/api/preferences?key=' + LAYOUT_STORAGE_KEY)
+        if (response.ok) {
+          const data = await response.json()
+          const parsed = data.value as Layouts
+          setLayouts(sanitizeLayouts(parsed))
+          // 同步到 localStorage 作为缓存
+          window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(parsed))
+        } else {
+          // 数据库没有，尝试从 localStorage 恢复
+          const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
+          if (stored) {
+            const parsed = JSON.parse(stored) as Layouts
+            setLayouts(sanitizeLayouts(parsed))
+            // 保存到数据库
+            await fetch('/api/preferences', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: LAYOUT_STORAGE_KEY, value: parsed })
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load saved Present layouts", error)
+        // 失败时尝试 localStorage
+        try {
+          const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
+          if (stored) {
+            const parsed = JSON.parse(stored) as Layouts
+            setLayouts(sanitizeLayouts(parsed))
+          }
+        } catch (e) {
+          console.error("Failed to load from localStorage", e)
+        }
       }
-    } catch (error) {
-      console.error("Failed to load saved Present layouts", error)
+
+      setMounted(true)
     }
 
-    setMounted(true)
+    loadLayouts()
   }, [])
 
   useEffect(() => {
     if (!mounted || typeof window === "undefined") return
 
-    try {
-      window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layouts))
-    } catch (error) {
-      console.error("Failed to persist Present layouts", error)
+    const saveLayouts = async () => {
+      try {
+        // 保存到 localStorage（即时缓存）
+        window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layouts))
+
+        // 保存到数据库（持久化）
+        await fetch('/api/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: LAYOUT_STORAGE_KEY, value: layouts })
+        })
+      } catch (error) {
+        console.error("Failed to persist Present layouts", error)
+      }
     }
+
+    saveLayouts()
   }, [layouts, mounted])
 
   const handleHeightChange = useCallback((moduleId: ModuleKey, height: number) => {
@@ -321,9 +376,12 @@ export default function PresentPage() {
     <div className="min-h-screen px-6 pt-6 pb-6 bg-gradient-to-br from-gray-500 via-gray-400 to-gray-300">
       <div className="mx-auto w-full max-w-none">
         {/* 头部导航 */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">现在 · Present</h1>
-          <p className="text-gray-600">专注当下，这是唯一真实的时刻</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">现在 · Present</h1>
+            <p className="text-gray-600">专注当下，这是唯一真实的时刻</p>
+          </div>
+          <DailyReviewButton />
         </div>
 
         {/* 时态导航 */}
@@ -374,6 +432,14 @@ export default function PresentPage() {
 
         {/* 快捷导航 */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <Link href="/whiteboard">
+            <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-green-200 bg-green-50">
+              <div className="flex flex-col items-center">
+                <MessageSquare className="w-6 h-6 mb-2 text-green-600" />
+                <span className="text-sm text-green-700 font-medium">思维整理</span>
+              </div>
+            </Card>
+          </Link>
           <Link href="/schedule">
             <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-blue-200 bg-blue-50">
               <div className="flex flex-col items-center">

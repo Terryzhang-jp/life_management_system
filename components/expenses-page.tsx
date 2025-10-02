@@ -40,6 +40,7 @@ interface ExpenseRecord {
   note?: string
   categoryId?: number | null
   category?: ExpenseCategory | null
+  receiptPaths?: string[]
 }
 
 type CategoryEdits = Record<number, { name: string; colorHex: string }>
@@ -178,10 +179,6 @@ const toInputTime = (value: string) => {
   }, [filteredExpenses])
 
   useEffect(() => {
-    void loadData()
-  }, [loadData])
-
-  useEffect(() => {
     if (!showCategoryManager) return
 
     const edits: CategoryEdits = {}
@@ -248,6 +245,10 @@ const toInputTime = (value: string) => {
       setLoading(false)
     }
   }, [loadCategories, loadExpenses])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   const resetNewExpenseForm = () => {
     setNewExpenseTitle("")

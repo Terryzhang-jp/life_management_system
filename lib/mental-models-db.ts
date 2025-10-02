@@ -8,6 +8,7 @@ export interface MentalModel {
   canvasData: {              // Excalidraw 画布数据
     elements: any[]          // Excalidraw 元素数组
     appState?: any           // 应用状态（视图、主题等）
+    files?: any              // 图片文件数据（key: fileId, value: base64 data）
   }
   thumbnail?: string          // 缩略图预览(base64)
   tags?: string[]            // 标签
@@ -209,7 +210,7 @@ class MentalModelsDatabaseManager {
 
   // 辅助方法：将数据库行转换为MentalModel对象
   private mapRowToMentalModel(row: any): MentalModel {
-    let canvasData = { elements: [], appState: {} }
+    let canvasData: { elements: any[], appState: any } = { elements: [], appState: {} }
     try {
       const parsed = JSON.parse(row.canvas_data || '{"elements":[],"appState":{}}')
       // 兼容旧的数据格式（如果是数组则转换为新格式）

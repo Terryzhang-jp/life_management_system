@@ -58,7 +58,7 @@ interface Task {
 }
 
 interface TaskCategory {
-  id: number
+  id?: number
   name: string
   color: string
 }
@@ -381,7 +381,7 @@ export function TaskPool({ className, categories = [], selectedCategoryFilter, o
                   className="px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">全部</option>
-                  {categories.map((category) => (
+                  {categories.filter(c => c.id !== undefined).map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight, Clock, BookOpen, History, CheckCircle2, Wallet } from "lucide-react"
 import Link from "next/link"
 import { MemoriesGallery } from "@/components/memories-gallery"
+import CompletedTasksStats from "@/components/completed-tasks-stats"
 
 export default function PastPage() {
   return (
@@ -79,6 +80,11 @@ export default function PastPage() {
                 </Link>
               </CardContent>
             </Card>
+          </div>
+
+          {/* 完成任务统计 */}
+          <div className="mb-6 max-w-4xl">
+            <CompletedTasksStats />
           </div>
 
           {/* 主要功能：记忆相册 */}

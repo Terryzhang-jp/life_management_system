@@ -412,9 +412,9 @@ export default function SchedulePage() {
             updated[date] = updated[date].map(block =>
               block.id === blockId ? {
                 ...block,
-                categoryId,
-                categoryName: category?.name || null,
-                categoryColor: category?.color || null
+                categoryId: categoryId === null ? undefined : categoryId,
+                categoryName: category?.name ?? undefined,
+                categoryColor: category?.color ?? undefined
               } : block
             )
           })
@@ -426,9 +426,9 @@ export default function SchedulePage() {
           prev.map(block =>
             block.id === blockId ? {
               ...block,
-              categoryId,
-              categoryName: category?.name || null,
-              categoryColor: category?.color || null
+              categoryId: categoryId === null ? undefined : categoryId,
+              categoryName: category?.name ?? undefined,
+              categoryColor: category?.color ?? undefined
             } : block
           )
         )

@@ -8,8 +8,8 @@ export async function GET() {
 
     // 获取所有任务的ID
     const allTaskIds: number[] = []
-    Object.values(tasks).forEach(taskArray => {
-      taskArray.forEach(task => {
+    Object.values(tasks).forEach((taskArray: any[]) => {
+      taskArray.forEach((task: any) => {
         if (task.id) allTaskIds.push(task.id)
       })
     })

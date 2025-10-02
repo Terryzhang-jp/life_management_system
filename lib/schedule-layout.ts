@@ -36,7 +36,7 @@ export function calculateBlockLayouts(blocks: ScheduleBlock[]): Map<number, Bloc
   })
 
   // Find overlapping groups
-  const groups: typeof blocksWithMinutes[][] = []
+  const groups: (typeof blocksWithMinutes[number])[][] = []
 
   for (const block of blocksWithMinutes) {
     let added = false

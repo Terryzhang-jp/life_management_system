@@ -13,7 +13,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { getLocalDateString } from '@/lib/date-utils'
 
 interface TaskCategory {
-  id: number
+  id?: number
   name: string
   color: string
 }

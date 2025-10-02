@@ -100,8 +100,25 @@ export default function MentalModelCanvasPage() {
   const handleCanvasChange = async (canvasData: any) => {
     if (!model) return
 
-    // 自动保存画布数据
-    await saveModel({ canvasData })
+    // 静默保存画布数据，不更新UI状态
+    try {
+      const updateData = {
+        id: model.id,
+        canvasData
+      }
+
+      await fetch('/api/mental-models', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      // 不调用 setModel，避免触发重新渲染
+    } catch (error) {
+      console.error('Error auto-saving canvas:', error)
+    }
   }
 
   // 添加标签

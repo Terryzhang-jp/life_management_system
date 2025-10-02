@@ -33,6 +33,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 追溯主任务（level=0）
+    let mainTask = task
+    let currentTask = task
+    while (currentTask.parentId) {
+      const parent = tasksDbManager.getTask(currentTask.parentId)
+      if (!parent) break
+      mainTask = parent
+      currentTask = parent
+    }
+
     // 构建完成任务数据
     const completedTaskData = {
       taskId: task.id!,
@@ -41,6 +51,7 @@ export async function POST(request: NextRequest) {
       taskLevel: task.level || 0,
       parentTaskId: task.parentId,
       grandparentTaskId: undefined as number | undefined,
+      mainTaskTitle: mainTask.title,  // 保存主任务标题
       completionComment: completionComment?.trim() || undefined
     }
 
@@ -54,6 +65,9 @@ export async function POST(request: NextRequest) {
 
     // 记录完成
     const completedId = completedTasksDbManager.completeTask(completedTaskData)
+
+    // 标记任务为已完成（软删除）
+    await tasksDbManager.updateTask(taskId, { isCompleted: true })
 
     return NextResponse.json({
       success: true,
@@ -108,6 +122,9 @@ export async function DELETE(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // 恢复任务为未完成状态
+    await tasksDbManager.updateTask(taskIdNum, { isCompleted: false })
 
     return NextResponse.json({
       success: true,
@@ -219,12 +236,19 @@ export async function GET(request: NextRequest) {
       }
 
       const statusMap = completedTasksDbManager.getTasksCompletionStatus(taskIds)
-      const statusArray = Array.from(statusMap.entries()).map(([taskId, info]) => ({
-        taskId,
+      const statusArray = Array.from(statusMap.entries()).map(([, info]) => ({
         ...info
       }))
 
       return NextResponse.json(statusArray)
+
+    } else if (action === 'group-by-main') {
+      // 按主任务分组统计
+      const days = searchParams.get('days') ? parseInt(searchParams.get('days')!) : 7
+
+      const groupedData = completedTasksDbManager.getCompletionByMainTask({ days })
+
+      return NextResponse.json(groupedData)
 
     } else {
       // 获取已完成任务列表 (默认行为)

@@ -132,7 +132,7 @@ class HabitsDatabaseManager {
     }
 
     // 获取所有出现过的routine ID
-    const routineIds = [...new Set(records.map(r => r.routine_id))]
+    const routineIds = Array.from(new Set(records.map(r => r.routine_id)))
 
     // 构建热力图数据（这里我们需要从外部获取routine名称）
     const heatmapData: HeatmapData[] = routineIds.map(routineId => {

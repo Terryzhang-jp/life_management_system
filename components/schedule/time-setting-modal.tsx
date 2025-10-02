@@ -192,9 +192,9 @@ export function TimeSettingModal({
         startTime,
         endTime,
         comment: comment.trim() || undefined,
-        categoryId,
-        categoryName: category?.name || null,
-        categoryColor: category?.color || null
+        categoryId: categoryId === null ? undefined : categoryId,
+        categoryName: category?.name ?? undefined,
+        categoryColor: category?.color ?? undefined
       }
       onUpdate(existingBlock.id!, updates)
     } else if (mode === 'create') {
@@ -212,9 +212,9 @@ export function TimeSettingModal({
           taskTitle: quickTitle.trim(),  // Use the quick create title
           parentTitle: undefined,
           grandparentTitle: undefined,
-          categoryId,
-          categoryName: category?.name || null,
-          categoryColor: category?.color || null
+          categoryId: categoryId === null ? undefined : categoryId,
+          categoryName: category?.name ?? undefined,
+          categoryColor: category?.color ?? undefined
         }
         onConfirm(scheduleBlock)
       } else if (task) {
@@ -229,9 +229,9 @@ export function TimeSettingModal({
           taskTitle: task.title,
           parentTitle: task.parentTitle || undefined,
           grandparentTitle: task.grandparentTitle || undefined,
-          categoryId,
-          categoryName: category?.name || null,
-          categoryColor: category?.color || null
+          categoryId: categoryId === null ? undefined : categoryId,
+          categoryName: category?.name ?? undefined,
+          categoryColor: category?.color ?? undefined
         }
         onConfirm(scheduleBlock)
       }

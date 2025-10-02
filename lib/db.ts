@@ -54,6 +54,17 @@ class DatabaseManager {
       )
     `)
 
+    // 创建用户偏好设置表
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
     // 检查是否有数据，如果没有则插入默认记录
     const count = db.prepare('SELECT COUNT(*) as count FROM life_data').get() as { count: number }
     if (count.count === 0) {
@@ -124,6 +135,34 @@ class DatabaseManager {
 
   async importData(data: Omit<LifeData, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
     return this.saveData(data)
+  }
+
+  // 获取用户偏好设置
+  async getPreference(key: string): Promise<string | null> {
+    const db = this.getDb()
+    const row = db.prepare('SELECT value FROM user_preferences WHERE key = ?').get(key) as any
+
+    return row ? row.value : null
+  }
+
+  // 保存用户偏好设置
+  async setPreference(key: string, value: string): Promise<void> {
+    const db = this.getDb()
+
+    // 使用 UPSERT (INSERT OR REPLACE)
+    db.prepare(`
+      INSERT INTO user_preferences (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(key, value)
+  }
+
+  // 删除用户偏好设置
+  async deletePreference(key: string): Promise<void> {
+    const db = this.getDb()
+    db.prepare('DELETE FROM user_preferences WHERE key = ?').run(key)
   }
 
   close() {

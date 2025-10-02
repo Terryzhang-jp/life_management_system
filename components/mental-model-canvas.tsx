@@ -30,7 +30,7 @@ export function MentalModelCanvas({ initialData, onChange }: MentalModelCanvasPr
   const changeTimeoutRef = useRef<NodeJS.Timeout>()
 
   // 处理画布数据变化
-  const handleCanvasChange = useCallback((elements: any, appState: any) => {
+  const handleCanvasChange = useCallback((elements: any, appState: any, files: any) => {
     // 清除之前的定时器
     if (changeTimeoutRef.current) {
       clearTimeout(changeTimeoutRef.current)
@@ -38,21 +38,44 @@ export function MentalModelCanvas({ initialData, onChange }: MentalModelCanvasPr
 
     // 设置防抖定时器，避免频繁保存
     changeTimeoutRef.current = setTimeout(() => {
-      const canvasData = {
-        elements,
-        appState: {
-          // 只保存必要的应用状态
-          theme: appState.theme,
-          viewBackgroundColor: appState.viewBackgroundColor,
-          gridSize: appState.gridSize,
-          zoom: appState.zoom,
-          scrollX: appState.scrollX,
-          scrollY: appState.scrollY,
+      // 从 API 获取完整的场景数据（包括 files）
+      if (excalidrawAPI) {
+        const sceneData = excalidrawAPI.getSceneElements()
+        const filesData = excalidrawAPI.getFiles()
+
+        const canvasData = {
+          elements: sceneData,
+          appState: {
+            // 只保存必要的应用状态
+            theme: appState.theme,
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+            zoom: appState.zoom,
+            scrollX: appState.scrollX,
+            scrollY: appState.scrollY,
+          },
+          files: filesData // 保存图片文件数据
         }
+
+        onChange(canvasData)
+      } else {
+        // 如果 API 还未准备好，使用传入的数据
+        const canvasData = {
+          elements,
+          appState: {
+            theme: appState.theme,
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+            zoom: appState.zoom,
+            scrollX: appState.scrollX,
+            scrollY: appState.scrollY,
+          },
+          files: files || {}
+        }
+        onChange(canvasData)
       }
-      onChange(canvasData)
-    }, 1000) // 1秒后自动保存
-  }, [onChange])
+    }, 3000) // 3秒后自动保存
+  }, [onChange, excalidrawAPI])
 
   useEffect(() => {
     setMounted(true)
@@ -106,7 +129,8 @@ export function MentalModelCanvas({ initialData, onChange }: MentalModelCanvasPr
               gridSize: null,
               colorPalette: {},
               ...initialData?.appState,
-            }
+            },
+            files: initialData?.files || {}
           }}
           onChange={handleCanvasChange}
           langCode="zh-CN"
@@ -117,10 +141,10 @@ export function MentalModelCanvas({ initialData, onChange }: MentalModelCanvasPr
               export: {
                 saveFileToDisk: true
               },
-              theme: true,
+              toggleTheme: true,
             },
             tools: {
-              image: false,
+              image: true,
             }
           }}
         />

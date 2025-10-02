@@ -52,7 +52,7 @@ export async function PUT(
         : existingExpense.receiptPaths
       const newReceiptBlobs = formData
         .getAll('receipts')
-        .filter((entry): entry is Blob => entry instanceof Blob)
+        .filter((entry): entry is File => entry instanceof File)
         .map((blob) => ({
           blob,
           name: typeof (blob as any).name === 'string' ? (blob as any).name : undefined

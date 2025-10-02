@@ -28,7 +28,7 @@ export function ThoughtsAndConcerns({ className }: ThoughtsAndConcernsProps) {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [editingConcern, setEditingConcern] = useState<{id: number, concern: string} | null>(null)
+  const [editingConcern, setEditingConcern] = useState<{id: number, concern: string} | undefined>(undefined)
   const [refreshKey, setRefreshKey] = useState(0)
 
   // 获取未解决的纠结
@@ -82,7 +82,7 @@ export function ThoughtsAndConcerns({ className }: ThoughtsAndConcernsProps) {
       fetchResolvedConcerns()
     }
     setShowForm(false)
-    setEditingConcern(null)
+    setEditingConcern(undefined)
   }
 
   // 标记纠结为已解决
@@ -353,7 +353,7 @@ export function ThoughtsAndConcerns({ className }: ThoughtsAndConcernsProps) {
           onConcernAdded={handleConcernAddedOrEdited}
           onClose={() => {
             setShowForm(false)
-            setEditingConcern(null)
+            setEditingConcern(undefined)
           }}
           editConcern={editingConcern}
         />

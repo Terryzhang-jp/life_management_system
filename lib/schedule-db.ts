@@ -430,7 +430,7 @@ export function checkTimeConflict(
   }
 
   const stmt = db.prepare(query)
-  const params = [date, endTime, startTime, startTime, endTime, startTime, endTime]
+  const params: (string | number)[] = [date, endTime, startTime, startTime, endTime, startTime, endTime]
   if (excludeId) params.push(excludeId)
 
   return stmt.all(...params) as ScheduleBlock[]
@@ -520,6 +520,24 @@ export function batchCreateScheduleBlocks(blocks: ScheduleBlock[]): void {
   })
 
   transaction()
+}
+
+// Get all unique dates with schedule blocks in a given month
+export function getScheduledDatesInMonth(year: number, month: number): string[] {
+  // month 是 1-12，转换为两位数字符串
+  const monthStr = month.toString().padStart(2, '0')
+  const startDate = `${year}-${monthStr}-01`
+  const endDate = `${year}-${monthStr}-31`
+
+  const stmt = db.prepare(`
+    SELECT DISTINCT date
+    FROM schedule_blocks
+    WHERE date >= ? AND date <= ?
+    ORDER BY date
+  `)
+
+  const rows = stmt.all(startDate, endDate) as any[]
+  return rows.map(row => row.date)
 }
 
 export default db
