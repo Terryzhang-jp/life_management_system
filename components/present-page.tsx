@@ -16,6 +16,7 @@ import { PastIncompleteList } from "@/components/schedule/past-incomplete-list"
 import { TodayScheduleSummary } from "@/components/present/today-schedule-summary"
 import DailyReviewButton from "@/components/daily-review/daily-review-button"
 import MinimalCalendar from "@/components/minimal-calendar"
+import DailyReviewQuick from "@/components/daily-review-quick"
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -23,7 +24,7 @@ const BREAKPOINTS = { lg: 1280, md: 1024, sm: 768, xs: 576, xxs: 0 }
 const COLS = { lg: 12, md: 10, sm: 6, xs: 4, xxs: 1 }
 const ROW_HEIGHT = 40
 const GRID_MARGIN: [number, number] = [24, 24]
-const MIN_ROWS = 6
+const DEFAULT_MIN_ROWS = 6
 const LAYOUT_STORAGE_KEY = "present-grid-layouts-v1"
 const TIMELINE_NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon; isCurrent?: boolean }> = [
   { href: "/past", label: "过去", icon: ArrowLeft },
@@ -31,7 +32,19 @@ const TIMELINE_NAVIGATION: Array<{ href: string; label: string; icon: LucideIcon
   { href: "/future", label: "未来", icon: ArrowRight }
 ]
 
-type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "todaySummary" | "timeline" | "pastIncomplete" | "calendar"
+type ModuleKey = "clock" | "decisions" | "habits" | "thoughts" | "todaySummary" | "timeline" | "pastIncomplete" | "calendar" | "dailyReview"
+
+const MODULE_MIN_ROWS: Record<ModuleKey, number> = {
+  clock: DEFAULT_MIN_ROWS,
+  decisions: DEFAULT_MIN_ROWS,
+  habits: DEFAULT_MIN_ROWS,
+  thoughts: DEFAULT_MIN_ROWS,
+  todaySummary: DEFAULT_MIN_ROWS,
+  timeline: 3,
+  pastIncomplete: DEFAULT_MIN_ROWS,
+  calendar: DEFAULT_MIN_ROWS,
+  dailyReview: 2
+}
 
 interface ModuleConfig {
   id: ModuleKey
@@ -49,6 +62,11 @@ const MODULES: ModuleConfig[] = [
     id: "decisions",
     label: "今日决策",
     render: () => <DailyDecisions />
+  },
+  {
+    id: "dailyReview",
+    label: "每日速填",
+    render: () => <DailyReviewQuick />
   },
   {
     id: "calendar",
@@ -84,54 +102,59 @@ const MODULES: ModuleConfig[] = [
 
 const DEFAULT_LAYOUTS: Layouts = {
   lg: [
-    { i: "clock", x: 0, y: 0, w: 4, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "decisions", x: 4, y: 0, w: 4, h: 8, minW: 3, minH: MIN_ROWS },
-    { i: "calendar", x: 8, y: 0, w: 4, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 10, w: 6, h: 12, minW: 3, minH: MIN_ROWS },
-    { i: "thoughts", x: 6, y: 10, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 22, w: 6, h: 10, minW: 3, minH: MIN_ROWS },
-    { i: "todaySummary", x: 6, y: 22, w: 6, h: 8, minW: 3, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 32, w: 12, h: 14, minW: 4, minH: MIN_ROWS }
+    { i: "clock", x: 0, y: 0, w: 3, h: 10, minW: 3, minH: MODULE_MIN_ROWS.clock },
+    { i: "decisions", x: 3, y: 0, w: 3, h: 8, minW: 3, minH: MODULE_MIN_ROWS.decisions },
+    { i: "dailyReview", x: 6, y: 0, w: 6, h: 8, minW: 4, minH: MODULE_MIN_ROWS.dailyReview },
+    { i: "calendar", x: 0, y: 10, w: 4, h: 10, minW: 3, minH: MODULE_MIN_ROWS.calendar },
+    { i: "habits", x: 4, y: 10, w: 4, h: 12, minW: 3, minH: MODULE_MIN_ROWS.habits },
+    { i: "thoughts", x: 8, y: 10, w: 4, h: 10, minW: 3, minH: MODULE_MIN_ROWS.thoughts },
+    { i: "pastIncomplete", x: 0, y: 22, w: 6, h: 10, minW: 3, minH: MODULE_MIN_ROWS.pastIncomplete },
+    { i: "todaySummary", x: 6, y: 22, w: 6, h: 8, minW: 3, minH: MODULE_MIN_ROWS.todaySummary },
+    { i: "timeline", x: 0, y: 32, w: 12, h: 14, minW: 4, minH: MODULE_MIN_ROWS.timeline }
   ],
   md: [
-    { i: "clock", x: 0, y: 0, w: 5, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "decisions", x: 5, y: 0, w: 5, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "calendar", x: 0, y: 10, w: 5, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "habits", x: 5, y: 10, w: 5, h: 12, minW: 4, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 22, w: 10, h: 10, minW: 5, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 32, w: 10, h: 10, minW: 5, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 42, w: 10, h: 8, minW: 5, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 50, w: 10, h: 14, minW: 6, minH: MIN_ROWS }
+    { i: "clock", x: 0, y: 0, w: 5, h: 10, minW: 4, minH: MODULE_MIN_ROWS.clock },
+    { i: "decisions", x: 5, y: 0, w: 5, h: 8, minW: 4, minH: MODULE_MIN_ROWS.decisions },
+    { i: "dailyReview", x: 0, y: 10, w: 10, h: 8, minW: 6, minH: MODULE_MIN_ROWS.dailyReview },
+    { i: "calendar", x: 0, y: 18, w: 5, h: 10, minW: 4, minH: MODULE_MIN_ROWS.calendar },
+    { i: "habits", x: 5, y: 18, w: 5, h: 12, minW: 4, minH: MODULE_MIN_ROWS.habits },
+    { i: "thoughts", x: 0, y: 30, w: 10, h: 10, minW: 5, minH: MODULE_MIN_ROWS.thoughts },
+    { i: "pastIncomplete", x: 0, y: 40, w: 10, h: 10, minW: 5, minH: MODULE_MIN_ROWS.pastIncomplete },
+    { i: "todaySummary", x: 0, y: 50, w: 10, h: 8, minW: 5, minH: MODULE_MIN_ROWS.todaySummary },
+    { i: "timeline", x: 0, y: 58, w: 10, h: 14, minW: 6, minH: MODULE_MIN_ROWS.timeline }
   ],
   sm: [
-    { i: "clock", x: 0, y: 0, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "decisions", x: 0, y: 10, w: 6, h: 8, minW: 6, minH: MIN_ROWS },
-    { i: "calendar", x: 0, y: 18, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 28, w: 6, h: 12, minW: 6, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 40, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 50, w: 6, h: 10, minW: 6, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 60, w: 6, h: 8, minW: 6, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 68, w: 6, h: 14, minW: 6, minH: MIN_ROWS }
+    { i: "clock", x: 0, y: 0, w: 6, h: 10, minW: 6, minH: MODULE_MIN_ROWS.clock },
+    { i: "decisions", x: 0, y: 10, w: 6, h: 8, minW: 6, minH: MODULE_MIN_ROWS.decisions },
+    { i: "dailyReview", x: 0, y: 18, w: 6, h: 8, minW: 6, minH: MODULE_MIN_ROWS.dailyReview },
+    { i: "calendar", x: 0, y: 26, w: 6, h: 10, minW: 6, minH: MODULE_MIN_ROWS.calendar },
+    { i: "habits", x: 0, y: 36, w: 6, h: 12, minW: 6, minH: MODULE_MIN_ROWS.habits },
+    { i: "thoughts", x: 0, y: 48, w: 6, h: 10, minW: 6, minH: MODULE_MIN_ROWS.thoughts },
+    { i: "pastIncomplete", x: 0, y: 58, w: 6, h: 10, minW: 6, minH: MODULE_MIN_ROWS.pastIncomplete },
+    { i: "todaySummary", x: 0, y: 68, w: 6, h: 8, minW: 6, minH: MODULE_MIN_ROWS.todaySummary },
+    { i: "timeline", x: 0, y: 76, w: 6, h: 14, minW: 6, minH: MODULE_MIN_ROWS.timeline }
   ],
   xs: [
-    { i: "clock", x: 0, y: 0, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "decisions", x: 0, y: 10, w: 4, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "calendar", x: 0, y: 18, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 28, w: 4, h: 12, minW: 4, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 40, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 50, w: 4, h: 10, minW: 4, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 60, w: 4, h: 8, minW: 4, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 68, w: 4, h: 14, minW: 4, minH: MIN_ROWS }
+    { i: "clock", x: 0, y: 0, w: 4, h: 10, minW: 4, minH: MODULE_MIN_ROWS.clock },
+    { i: "decisions", x: 0, y: 10, w: 4, h: 8, minW: 4, minH: MODULE_MIN_ROWS.decisions },
+    { i: "dailyReview", x: 0, y: 18, w: 4, h: 8, minW: 4, minH: MODULE_MIN_ROWS.dailyReview },
+    { i: "calendar", x: 0, y: 26, w: 4, h: 10, minW: 4, minH: MODULE_MIN_ROWS.calendar },
+    { i: "habits", x: 0, y: 36, w: 4, h: 12, minW: 4, minH: MODULE_MIN_ROWS.habits },
+    { i: "thoughts", x: 0, y: 48, w: 4, h: 10, minW: 4, minH: MODULE_MIN_ROWS.thoughts },
+    { i: "pastIncomplete", x: 0, y: 58, w: 4, h: 10, minW: 4, minH: MODULE_MIN_ROWS.pastIncomplete },
+    { i: "todaySummary", x: 0, y: 68, w: 4, h: 8, minW: 4, minH: MODULE_MIN_ROWS.todaySummary },
+    { i: "timeline", x: 0, y: 76, w: 4, h: 14, minW: 4, minH: MODULE_MIN_ROWS.timeline }
   ],
   xxs: [
-    { i: "clock", x: 0, y: 0, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "decisions", x: 0, y: 10, w: 1, h: 8, minW: 1, minH: MIN_ROWS },
-    { i: "calendar", x: 0, y: 18, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "habits", x: 0, y: 28, w: 1, h: 12, minW: 1, minH: MIN_ROWS },
-    { i: "thoughts", x: 0, y: 40, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "pastIncomplete", x: 0, y: 50, w: 1, h: 10, minW: 1, minH: MIN_ROWS },
-    { i: "todaySummary", x: 0, y: 60, w: 1, h: 8, minW: 1, minH: MIN_ROWS },
-    { i: "timeline", x: 0, y: 68, w: 1, h: 14, minW: 1, minH: MIN_ROWS }
+    { i: "clock", x: 0, y: 0, w: 1, h: 10, minW: 1, minH: MODULE_MIN_ROWS.clock },
+    { i: "decisions", x: 0, y: 10, w: 1, h: 8, minW: 1, minH: MODULE_MIN_ROWS.decisions },
+    { i: "dailyReview", x: 0, y: 18, w: 1, h: 8, minW: 1, minH: MODULE_MIN_ROWS.dailyReview },
+    { i: "calendar", x: 0, y: 26, w: 1, h: 10, minW: 1, minH: MODULE_MIN_ROWS.calendar },
+    { i: "habits", x: 0, y: 36, w: 1, h: 12, minW: 1, minH: MODULE_MIN_ROWS.habits },
+    { i: "thoughts", x: 0, y: 48, w: 1, h: 10, minW: 1, minH: MODULE_MIN_ROWS.thoughts },
+    { i: "pastIncomplete", x: 0, y: 58, w: 1, h: 10, minW: 1, minH: MODULE_MIN_ROWS.pastIncomplete },
+    { i: "todaySummary", x: 0, y: 68, w: 1, h: 8, minW: 1, minH: MODULE_MIN_ROWS.todaySummary },
+    { i: "timeline", x: 0, y: 76, w: 1, h: 14, minW: 1, minH: MODULE_MIN_ROWS.timeline }
   ]
 }
 
@@ -148,9 +171,19 @@ function sanitizeLayouts(layouts: Layouts | undefined): Layouts {
     const storedLayout = layouts[breakpoint] ?? []
 
     const filtered = storedLayout.filter(item => moduleSet.has(item.i as ModuleKey))
-    const seen = new Set(filtered.map(item => item.i as ModuleKey))
+    const normalized = filtered.map(item => {
+      const defaults = defaultLookup[item.i]
+      if (!defaults) return item
+      return {
+        ...item,
+        minW: defaults.minW,
+        minH: defaults.minH
+      }
+    })
 
-    const merged = [...filtered]
+    const seen = new Set(normalized.map(item => item.i as ModuleKey))
+
+    const merged = [...normalized]
     MODULE_IDS.forEach(moduleId => {
       if (!seen.has(moduleId) && defaultLookup[moduleId]) {
         merged.push(defaultLookup[moduleId])
@@ -284,8 +317,9 @@ export default function PresentPage() {
   }, [layouts, mounted])
 
   const handleHeightChange = useCallback((moduleId: ModuleKey, height: number) => {
+    const minRows = MODULE_MIN_ROWS[moduleId] ?? DEFAULT_MIN_ROWS
     const rows = Math.max(
-      MIN_ROWS,
+      minRows,
       Math.ceil((height + GRID_MARGIN[1]) / (ROW_HEIGHT + GRID_MARGIN[1]))
     )
 

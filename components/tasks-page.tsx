@@ -5,13 +5,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2, Palette } from "lucide-react"
+import { Plus, X, Edit2, Save, Loader2, ArrowLeft, Expand, ChevronRight, HelpCircle, CheckSquare, Square, MessageSquare, CheckCircle2, Palette, GripVertical } from "lucide-react"
 import { DatePicker, DateDisplay } from "@/components/ui/date-picker"
 import { TaskCompletionDialog } from "./task-completion-dialog"
 import TaskCategoryManager from "./task-category-manager"
 import AspirationsCard from "./aspirations-card"
+import { SortableTaskItem } from "./sortable-task-item"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable'
 
 type TaskType = 'routine' | 'long-term' | 'short-term'
 
@@ -28,6 +44,7 @@ interface Task {
   title: string
   description?: string
   priority?: number
+  sortOrder?: number
   parentId?: number
   level?: number
   deadline?: string
@@ -66,23 +83,38 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
-  // 展开视图状态
-  const [expandedTask, setExpandedTask] = useState<Task | null>(null)
+  // 新布局状态：三列固定显示
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<TaskType | 'all'>('all')
+  const [selectedMainTask, setSelectedMainTask] = useState<Task | null>(null)
   const [subTasks, setSubTasks] = useState<Task[]>([])
-  const [subSubTasks, setSubSubTasks] = useState<Task[]>([])
   const [selectedSubTask, setSelectedSubTask] = useState<Task | null>(null)
+  const [subSubTasks, setSubSubTasks] = useState<Task[]>([])
 
   // 完成对话框状态
   const [showCompletionDialog, setShowCompletionDialog] = useState(false)
   const [taskToComplete, setTaskToComplete] = useState<Task | null>(null)
 
   // 子任务表单状态
+  const [showMainTaskForm, setShowMainTaskForm] = useState(false)
+  const [newMainTaskType, setNewMainTaskType] = useState<TaskType>('routine')
+  const [newMainTaskTitle, setNewMainTaskTitle] = useState("")
+  const [newMainTaskDesc, setNewMainTaskDesc] = useState("")
+  const [newMainTaskPriority, setNewMainTaskPriority] = useState(999)
+  const [newMainTaskCategoryId, setNewMainTaskCategoryId] = useState<number | undefined>(undefined)
   const [showSubTaskForm, setShowSubTaskForm] = useState(false)
   const [newSubTaskTitle, setNewSubTaskTitle] = useState("")
   const [newSubTaskDesc, setNewSubTaskDesc] = useState("")
   const [showSubSubTaskForm, setShowSubSubTaskForm] = useState(false)
   const [newSubSubTaskTitle, setNewSubSubTaskTitle] = useState("")
   const [newSubSubTaskDesc, setNewSubSubTaskDesc] = useState("")
+
+  // 拖拽传感器配置（用于所有拖拽操作）
+  const dragSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // 编辑状态
   const [editingSubTask, setEditingSubTask] = useState<Task | null>(null)
@@ -137,6 +169,92 @@ export default function TasksPage() {
     }
   }, [checkTaskUnclearChildren])
 
+  // 处理主任务排序
+  const handleMainTasksReorder = useCallback(async (type: TaskType, newTasks: Task[]) => {
+    // 构建排序更新数据
+    const taskOrders = newTasks.map((task, index) => ({
+      id: task.id!,
+      sortOrder: index + 1
+    }))
+
+    try {
+      const response = await fetch('/api/tasks/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskOrders })
+      })
+
+      if (response.ok) {
+        // 更新本地状态
+        setTasks(prev => ({
+          ...prev,
+          [type === 'routine' ? 'routines' : type === 'long-term' ? 'longTermTasks' : 'shortTermTasks']: newTasks
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to reorder tasks:', error)
+      toast({
+        title: "排序失败",
+        description: "无法保存任务顺序",
+        variant: "destructive"
+      })
+    }
+  }, [toast])
+
+  // 处理子任务排序
+  const handleSubTasksReorder = useCallback(async (newSubTasks: Task[]) => {
+    const taskOrders = newSubTasks.map((task, index) => ({
+      id: task.id!,
+      sortOrder: index + 1
+    }))
+
+    try {
+      const response = await fetch('/api/tasks/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskOrders })
+      })
+
+      if (response.ok) {
+        setSubTasks(newSubTasks)
+      }
+    } catch (error) {
+      console.error('Failed to reorder sub-tasks:', error)
+      toast({
+        title: "排序失败",
+        description: "无法保存子任务顺序",
+        variant: "destructive"
+      })
+    }
+  }, [toast])
+
+  // 处理子子任务排序
+  const handleSubSubTasksReorder = useCallback(async (newSubSubTasks: Task[]) => {
+    const taskOrders = newSubSubTasks.map((task, index) => ({
+      id: task.id!,
+      sortOrder: index + 1
+    }))
+
+    try {
+      const response = await fetch('/api/tasks/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskOrders })
+      })
+
+      if (response.ok) {
+        setSubSubTasks(newSubSubTasks)
+      }
+    } catch (error) {
+      console.error('Failed to reorder sub-sub-tasks:', error)
+      toast({
+        title: "排序失败",
+        description: "无法保存子子任务顺序",
+        variant: "destructive"
+      })
+    }
+  }, [toast])
+
   // 加载分类列表
   const loadCategories = useCallback(async () => {
     try {
@@ -154,6 +272,20 @@ export default function TasksPage() {
     void loadTasks()
     void loadCategories()
   }, [loadTasks, loadCategories])
+
+  // 当任务类型筛选改变时，清空选中状态
+  useEffect(() => {
+    setSelectedMainTask(null)
+    setSelectedSubTask(null)
+    setSubTasks([])
+    setSubSubTasks([])
+    setEditingId(null)
+    setShowMainTaskForm(false)
+    setNewMainTaskTitle("")
+    setNewMainTaskDesc("")
+    setNewMainTaskPriority(999)
+    setNewMainTaskCategoryId(undefined)
+  }, [selectedTypeFilter])
 
   // 加载子任务
   const loadSubTasks = useCallback(async (parentId: number, level: number = 1) => {
@@ -180,13 +312,41 @@ export default function TasksPage() {
   }, [checkTaskUnclearChildren])
 
   // 展开任务详情
-  const expandTask = async (task: Task) => {
-    setExpandedTask(task)
+  const selectMainTask = async (task: Task) => {
+    setSelectedMainTask(task)
     setSelectedSubTask(null)
     setSubSubTasks([])
     if (task.id) {
       await loadSubTasks(task.id, 1)
     }
+  }
+
+  const openMainTaskForm = () => {
+    if (showMainTaskForm) {
+      resetMainTaskForm()
+      return
+    }
+    const defaultType = selectedTypeFilter === 'all' ? 'routine' : selectedTypeFilter
+    setNewMainTaskType(defaultType as TaskType)
+    setNewMainTaskTitle("")
+    setNewMainTaskDesc("")
+    setNewMainTaskPriority(999)
+    setNewMainTaskCategoryId(undefined)
+    setShowMainTaskForm(true)
+  }
+
+  const resetMainTaskForm = () => {
+    setShowMainTaskForm(false)
+    setNewMainTaskType('routine')
+    setNewMainTaskTitle("")
+    setNewMainTaskDesc("")
+    setNewMainTaskPriority(999)
+    setNewMainTaskCategoryId(undefined)
+  }
+
+  const handleAddMainTask = async () => {
+    await addTask(newMainTaskType, newMainTaskTitle, newMainTaskDesc, newMainTaskPriority, newMainTaskCategoryId)
+    resetMainTaskForm()
   }
 
   // 选择子任务
@@ -199,7 +359,7 @@ export default function TasksPage() {
 
   // 关闭展开视图
   const closeExpandedView = () => {
-    setExpandedTask(null)
+    setSelectedMainTask(null)
     setSubTasks([])
     setSubSubTasks([])
     setSelectedSubTask(null)
@@ -215,7 +375,7 @@ export default function TasksPage() {
 
   // 添加子任务
   const handleAddSubTask = async () => {
-    if (!expandedTask?.id || !newSubTaskTitle.trim()) return
+    if (!selectedMainTask?.id || !newSubTaskTitle.trim()) return
 
     setLoading(true)
     try {
@@ -223,16 +383,16 @@ export default function TasksPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: expandedTask.type,
+          type: selectedMainTask.type,
           title: newSubTaskTitle.trim(),
           description: newSubTaskDesc.trim(),
-          parentId: expandedTask.id,
+          parentId: selectedMainTask.id,
           level: 1
         })
       })
 
       if (response.ok) {
-        await loadSubTasks(expandedTask.id, 1)
+        await loadSubTasks(selectedMainTask.id, 1)
         setNewSubTaskTitle("")
         setNewSubTaskDesc("")
         setShowSubTaskForm(false)
@@ -304,8 +464,8 @@ export default function TasksPage() {
       })
 
       if (response.ok) {
-        if (expandedTask?.id) {
-          await loadSubTasks(expandedTask.id, 1)
+        if (selectedMainTask?.id) {
+          await loadSubTasks(selectedMainTask.id, 1)
         }
         // 如果删除的是当前选中的子任务，清空右列
         if (selectedSubTask?.id === id) {
@@ -387,8 +547,8 @@ export default function TasksPage() {
       })
 
       if (response.ok) {
-        if (expandedTask?.id) {
-          await loadSubTasks(expandedTask.id, 1)
+        if (selectedMainTask?.id) {
+          await loadSubTasks(selectedMainTask.id, 1)
         }
         setEditingSubTask(null)
         toast({
@@ -474,8 +634,8 @@ export default function TasksPage() {
       if (response.ok) {
         // 重新加载任务数据
         await loadTasks()
-        if (expandedTask?.id) {
-          await loadSubTasks(expandedTask.id, 1)
+        if (selectedMainTask?.id) {
+          await loadSubTasks(selectedMainTask.id, 1)
           if (selectedSubTask?.id) {
             await loadSubTasks(selectedSubTask.id, 2)
           }
@@ -646,8 +806,8 @@ export default function TasksPage() {
   // 处理任务完成
   const handleTaskCompleted = async () => {
     await loadTasks() // 重新加载任务以更新完成状态
-    if (expandedTask?.id) {
-      await loadSubTasks(expandedTask.id, 1)
+    if (selectedMainTask?.id) {
+      await loadSubTasks(selectedMainTask.id, 1)
     }
     if (selectedSubTask?.id) {
       await loadSubTasks(selectedSubTask.id, 2)
@@ -664,8 +824,8 @@ export default function TasksPage() {
 
       if (response.ok) {
         await loadTasks()
-        if (expandedTask?.id) {
-          await loadSubTasks(expandedTask.id, 1)
+        if (selectedMainTask?.id) {
+          await loadSubTasks(selectedMainTask.id, 1)
         }
         if (selectedSubTask?.id) {
           await loadSubTasks(selectedSubTask.id, 2)
@@ -706,6 +866,31 @@ export default function TasksPage() {
     const [taskPriority, setTaskPriority] = useState(999)
     const [taskCategoryId, setTaskCategoryId] = useState<number | undefined>(undefined)
 
+    // 配置拖拽传感器
+    const sensors = useSensors(
+      useSensor(PointerSensor),
+      useSensor(KeyboardSensor, {
+        coordinateGetter: sortableKeyboardCoordinates,
+      })
+    )
+
+    // 处理拖拽结束
+    const handleDragEnd = (event: DragEndEvent) => {
+      const { active, over } = event
+
+      if (over && active.id !== over.id) {
+        const activeId = Number(active.id)
+        const overId = Number(over.id)
+        if (Number.isNaN(activeId) || Number.isNaN(overId)) return
+
+        const oldIndex = tasks.findIndex(task => task.id === activeId)
+        const newIndex = tasks.findIndex(task => task.id === overId)
+
+        const newTasks = arrayMove(tasks, oldIndex, newIndex)
+        handleMainTasksReorder(type, newTasks)
+      }
+    }
+
     const handleSubmit = async () => {
       await addTask(type, taskTitle, taskDesc, taskPriority, taskCategoryId)
       setTaskTitle("")
@@ -731,24 +916,38 @@ export default function TasksPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {/* 现有任务列表 */}
-          {tasks.map((task) => {
-            const isEditing = editingId === task.id
-            return (
-              <TaskItem
-                key={task.id}
-                task={task}
-                isEditing={isEditing}
-                onEdit={() => setEditingId(task.id!)}
-                onSave={(title, description, priority, categoryId) => updateTask(task.id!, title, description, priority, categoryId)}
-                onCancel={() => setEditingId(null)}
-                onDelete={() => deleteTask(task.id!)}
-                onExpand={() => expandTask(task)}
-                onComplete={() => showTaskCompletionDialog(task)}
-                onUncomplete={() => uncompleteTask(task.id!)}
-                disabled={loading}
-              />
-            )
-          })}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={tasks.map(task => task.id!)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3 pl-6">
+                {tasks.map((task) => {
+                  const isEditing = editingId === task.id
+                  return (
+                    <SortableTaskItem key={task.id} id={task.id!}>
+                      <TaskItem
+                        task={task}
+                        isEditing={isEditing}
+                        onEdit={() => setEditingId(task.id!)}
+                        onSave={(title, description, priority, categoryId) => updateTask(task.id!, title, description, priority, categoryId)}
+                        onCancel={() => setEditingId(null)}
+                        onDelete={() => deleteTask(task.id!)}
+                        onExpand={() => selectMainTask(task)}
+                        onComplete={() => showTaskCompletionDialog(task)}
+                        onUncomplete={() => uncompleteTask(task.id!)}
+                        disabled={loading}
+                      />
+                    </SortableTaskItem>
+                  )
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
 
           {/* 添加新任务表单 */}
           {showForm ? (
@@ -1057,36 +1256,124 @@ export default function TasksPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-2 text-xs">
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               onClick={onExpand}
               disabled={disabled}
-              className="h-6 w-6 p-0"
-              title="展开任务详情"
+              className="h-7 px-2 flex items-center gap-1"
             >
               <Expand className="h-3 w-3" />
+              <span>查看</span>
             </Button>
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               onClick={onEdit}
               disabled={disabled}
-              className="h-6 w-6 p-0"
+              className="h-7 px-2 flex items-center gap-1"
             >
               <Edit2 className="h-3 w-3" />
+              <span>编辑</span>
             </Button>
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               onClick={onDelete}
               disabled={disabled}
-              className="h-6 w-6 p-0"
+              className="h-7 px-2 flex items-center gap-1"
             >
               <X className="h-3 w-3" />
+              <span>删除</span>
             </Button>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  const MainTaskEditForm = ({
+    task,
+    onSave,
+    onCancel,
+    disabled,
+    categories
+  }: {
+    task: Task
+    onSave: (title: string, description: string, priority: number, categoryId?: number) => void
+    onCancel: () => void
+    disabled: boolean
+    categories: TaskCategory[]
+  }) => {
+    const [editTitle, setEditTitle] = useState(task.title)
+    const [editDescription, setEditDescription] = useState(task.description || "")
+    const [editPriority, setEditPriority] = useState(task.priority || 999)
+    const [editCategoryId, setEditCategoryId] = useState<number | undefined>(task.categoryId)
+
+    return (
+      <div className="p-3 border-2 border-dashed rounded mb-2 space-y-2 bg-blue-50/40">
+        <Input
+          placeholder="任务标题"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          autoFocus
+        />
+        <Textarea
+          placeholder="你为什么要做这个事情？对你的好处是什么？"
+          value={editDescription}
+          onChange={(e) => setEditDescription(e.target.value)}
+          className="min-h-[60px]"
+        />
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">重要度:</label>
+            <select
+              value={editPriority}
+              onChange={(e) => setEditPriority(Number(e.target.value))}
+              className="px-2 py-1 border rounded text-sm"
+            >
+              <option value={1}>1 (最重要)</option>
+              <option value={2}>2 (重要)</option>
+              <option value={3}>3 (较重要)</option>
+              <option value={4}>4 (一般)</option>
+              <option value={5}>5 (较低)</option>
+              <option value={999}>无优先级</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">分类:</label>
+            <select
+              value={editCategoryId ?? ''}
+              onChange={(e) => setEditCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+              className="px-2 py-1 border rounded text-sm"
+            >
+              <option value="">无分类</option>
+              {categories.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => onSave(editTitle, editDescription, editPriority, editCategoryId)}
+            disabled={disabled || !editTitle.trim()}
+          >
+            {disabled ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+            保存
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onCancel}
+            disabled={disabled}
+          >
+            取消
+          </Button>
         </div>
       </div>
     )
@@ -1341,520 +1628,715 @@ export default function TasksPage() {
           <p className="text-gray-600">整理和追踪所有需要做的事情</p>
         </div>
 
-        {/* 展开视图 */}
-        {expandedTask && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg w-full max-w-7xl h-3/5 overflow-hidden">
-              {/* 头部 */}
-              <div className="bg-gray-100 p-4 border-b flex justify-between items-center">
-                <h2 className="text-xl font-bold">任务详情展开</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={closeExpandedView}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+        {/* 顶部任务类型筛选卡片 */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <button
+            onClick={() => setSelectedTypeFilter('all')}
+            className={`p-4 rounded-lg border-2 transition-all ${
+              selectedTypeFilter === 'all'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <h3 className="font-bold text-lg mb-1">全部任务</h3>
+            <p className="text-sm text-gray-600">
+              显示所有类型的任务
+            </p>
+          </button>
+          <button
+            onClick={() => setSelectedTypeFilter('routine')}
+            className={`p-4 rounded-lg border-2 transition-all ${
+              selectedTypeFilter === 'routine'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <h3 className="font-bold text-lg mb-1">日常习惯</h3>
+            <p className="text-sm text-gray-600">
+              终身性的习惯和实践
+            </p>
+          </button>
+          <button
+            onClick={() => setSelectedTypeFilter('long-term')}
+            className={`p-4 rounded-lg border-2 transition-all ${
+              selectedTypeFilter === 'long-term'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <h3 className="font-bold text-lg mb-1">长期任务</h3>
+            <p className="text-sm text-gray-600">
+              持续几个月到几年
+            </p>
+          </button>
+          <button
+            onClick={() => setSelectedTypeFilter('short-term')}
+            className={`p-4 rounded-lg border-2 transition-all ${
+              selectedTypeFilter === 'short-term'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <h3 className="font-bold text-lg mb-1">短期任务</h3>
+            <p className="text-sm text-gray-600">
+              持续几小时到几天
+            </p>
+          </button>
+        </div>
 
-              {/* 三列内容 */}
-              <div className="flex h-full">
-                {/* 左列：主任务信息 */}
-                <div className="w-1/3 p-4 border-r">
-                  <h3 className="font-bold text-lg mb-4">主任务信息</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">标题</label>
-                      <p className="text-lg font-medium">{expandedTask.title}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">类型</label>
-                      <p className="text-sm">{
-                        expandedTask.type === 'routine' ? '日常习惯' :
-                        expandedTask.type === 'long-term' ? '长期任务' : '短期任务'
-                      }</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">优先级</label>
-                      <p className="text-sm">{expandedTask.priority === 999 ? '无排名' : expandedTask.priority}</p>
-                    </div>
-                    {expandedTask.description && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-600">描述</label>
-                        <p className="text-sm text-gray-700">{expandedTask.description}</p>
-                      </div>
-                    )}
+        {/* 三列固定布局 */}
+        <div className="grid grid-cols-3 gap-4 mb-6" style={{ height: 'calc(100vh - 400px)' }}>
+          {/* 左列：主任务列表 */}
+          <div className="border rounded-lg bg-white p-4 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg">
+                主任务
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  (点击查看子任务)
+                </span>
+              </h2>
+              <Button size="sm" onClick={openMainTaskForm} disabled={loading}>
+                <Plus className="h-3 w-3 mr-1" />
+                添加主任务
+              </Button>
+            </div>
+            {showMainTaskForm && (
+              <div className="p-3 border-2 border-dashed rounded mb-3 space-y-2">
+                {selectedTypeFilter === 'all' && (
+                  <div className="flex flex-col gap-1 text-sm">
+                    <label className="font-medium">任务类型</label>
+                    <select
+                      value={newMainTaskType}
+                      onChange={(e) => setNewMainTaskType(e.target.value as TaskType)}
+                      className="px-2 py-1 border rounded"
+                    >
+                      <option value="routine">日常习惯</option>
+                      <option value="long-term">长期任务</option>
+                      <option value="short-term">短期任务</option>
+                    </select>
+                  </div>
+                )}
+                <Input
+                  placeholder="任务标题"
+                  value={newMainTaskTitle}
+                  onChange={(e) => setNewMainTaskTitle(e.target.value)}
+                  autoFocus
+                />
+                <Textarea
+                  placeholder="为什么要做这个任务？对你的意义是什么？"
+                  value={newMainTaskDesc}
+                  onChange={(e) => setNewMainTaskDesc(e.target.value)}
+                  className="min-h-[60px]"
+                />
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium">重要度:</label>
+                    <select
+                      value={newMainTaskPriority}
+                      onChange={(e) => setNewMainTaskPriority(Number(e.target.value))}
+                      className="px-2 py-1 border rounded text-sm"
+                    >
+                      <option value={1}>1 (最重要)</option>
+                      <option value={2}>2 (重要)</option>
+                      <option value={3}>3 (较重要)</option>
+                      <option value={4}>4 (一般)</option>
+                      <option value={5}>5 (较低)</option>
+                      <option value={999}>无优先级</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium">分类:</label>
+                    <select
+                      value={newMainTaskCategoryId ?? ''}
+                      onChange={(e) => setNewMainTaskCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+                      className="px-2 py-1 border rounded text-sm"
+                    >
+                      <option value="">无分类</option>
+                      {categories.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleAddMainTask} disabled={loading || !newMainTaskTitle.trim()}>
+                    {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                    保存
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={resetMainTaskForm}
+                    disabled={loading}
+                  >
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="space-y-2 flex-1">
+              {(() => {
+                // 根据筛选器获取任务列表
+                let mainTasks: Task[] = []
+                let taskType: TaskType = 'routine'
 
-                {/* 中列：子任务 */}
-                <div className="w-1/3 p-4 border-r">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg">子任务</h3>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowSubTaskForm(true)}
-                      disabled={loading}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      添加子任务
-                    </Button>
-                  </div>
+                if (selectedTypeFilter === 'all') {
+                  mainTasks = [...tasks.routines, ...tasks.longTermTasks, ...tasks.shortTermTasks]
+                } else if (selectedTypeFilter === 'routine') {
+                  mainTasks = tasks.routines
+                  taskType = 'routine'
+                } else if (selectedTypeFilter === 'long-term') {
+                  mainTasks = tasks.longTermTasks
+                  taskType = 'long-term'
+                } else {
+                  mainTasks = tasks.shortTermTasks
+                  taskType = 'short-term'
+                }
 
-                  {/* 添加子任务表单 */}
-                  {showSubTaskForm && (
-                    <div className="space-y-2 p-3 border-2 border-dashed rounded-lg mb-4">
-                      <Input
-                        placeholder="子任务标题"
-                        value={newSubTaskTitle}
-                        onChange={(e) => setNewSubTaskTitle(e.target.value)}
-                        autoFocus
-                      />
-                      <Textarea
-                        placeholder="为什么要做这个子任务？"
-                        value={newSubTaskDesc}
-                        onChange={(e) => setNewSubTaskDesc(e.target.value)}
-                        className="min-h-[60px]"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleAddSubTask}
-                          disabled={loading || !newSubTaskTitle.trim()}
-                        >
-                          {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                          保存
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setShowSubTaskForm(false)
-                            setNewSubTaskTitle("")
-                            setNewSubTaskDesc("")
-                          }}
-                          disabled={loading}
-                        >
-                          取消
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                // 应用分类筛选
+                if (selectedCategoryFilter) {
+                  mainTasks = mainTasks.filter(t => t.categoryId === selectedCategoryFilter)
+                }
 
-                  <div className="space-y-2">
-                    {subTasks.map((subTask) => {
-                      const isEditing = editingSubTask?.id === subTask.id
-                      const subTaskCategory = subTask.categoryId
-                        ? categories.find(category => category.id === subTask.categoryId)
-                        : null
+                if (mainTasks.length === 0) {
+                  return <p className="text-gray-500 text-sm">暂无任务</p>
+                }
 
-                      if (isEditing) {
-                        return (
-                          <SubTaskEditForm
-                            key={subTask.id}
-                            subTask={subTask}
-                            onSave={(title, description, priority, deadline) => updateSubTask(subTask.id!, title, description, priority, deadline)}
-                            onCancel={() => setEditingSubTask(null)}
-                            disabled={loading}
-                          />
-                        )
-                      }
+                // 只在具体类型筛选时启用拖拽排序
+                if (selectedTypeFilter === 'all') {
+                  // 全部任务视图：不支持拖拽，只显示列表
+                  return mainTasks.map(task => {
+                    const isSelected = selectedMainTask?.id === task.id
+                    const isCompleted = task.completion?.isCompleted || false
+                    const taskCategory = task.categoryId ? categories.find(c => c.id === task.categoryId) : null
+                    const isEditing = editingId === task.id
 
-                      const isCompleted = subTask.completion?.isCompleted || false
-                      const titleClass = isCompleted
-                        ? 'font-medium text-gray-500 line-through'
-                        : 'font-medium text-gray-900'
-
+                    if (isEditing) {
                       return (
-                        <div
-                          key={subTask.id}
-                          className={`p-3 border rounded cursor-pointer transition-colors ${
-                            selectedSubTask?.id === subTask.id
-                              ? 'bg-gray-100 border-gray-400'
-                              : isCompleted
-                                ? 'bg-gray-100 border-gray-300'
-                                : 'hover:bg-gray-50'
-                          }`}
-                          onClick={() => selectSubTask(subTask)}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!subTask.id) return
-                                  if (isCompleted) {
-                                    uncompleteTask(subTask.id)
-                                  } else {
-                                    showTaskCompletionDialog(subTask)
-                                  }
-                                }}
-                                disabled={loading}
-                                className="h-6 w-6 p-0 mt-0.5"
-                                title={isCompleted ? '取消完成' : '标记为完成'}
-                              >
-                                {isCompleted ? (
-                                  <CheckSquare className="h-3 w-3 text-green-600" />
-                                ) : (
-                                  <Square className="h-3 w-3 text-gray-400" />
-                                )}
-                              </Button>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className={titleClass}>{subTask.title}</span>
-                                  {subTask.isUnclear && (
-                                    <span title={subTask.unclearReason || "此任务标记为模糊"}>
-                                      <HelpCircle className="h-4 w-4 text-orange-500" />
-                                    </span>
-                                  )}
-                                  {subTask.hasUnclearChildren && (
-                                    <span title="此任务有模糊的子任务">
-                                      <HelpCircle className="h-4 w-4 text-yellow-500" />
-                                    </span>
-                                  )}
-                                  {subTaskCategory && (
-                                    <span
-                                      className="text-[10px] px-2 py-0.5 rounded-full font-medium text-white"
-                                      style={{ backgroundColor: subTaskCategory.color }}
-                                      title={`分类: ${subTaskCategory.name}`}
-                                    >
-                                      {subTaskCategory.name}
-                                    </span>
-                                  )}
-                                  {isCompleted && subTask.completion?.completionComment && (
-                                    <span title={`完成感悟: ${subTask.completion.completionComment}`}>
-                                      <MessageSquare className="h-3 w-3 text-gray-400" />
-                                    </span>
-                                  )}
-                                </div>
-                                {subTask.description && (
-                                  <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                                    {subTask.description}
-                                  </p>
-                                )}
-                                <DateDisplay
-                                  date={subTask.deadline}
-                                  className={`mt-1 ${isCompleted ? 'text-gray-400' : ''}`}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleToggleUnclear(subTask)
-                                }}
-                                className="h-6 w-6 p-0"
-                                title={subTask.isUnclear ? '取消模糊标记' : '标记为模糊'}
-                              >
-                                <HelpCircle className={`h-3 w-3 ${subTask.isUnclear ? 'text-orange-500' : 'text-gray-400'}`} />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  startEditSubTask(subTask)
-                                }}
-                                className="h-6 w-6 p-0"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  deleteSubTask(subTask.id!)
-                                }}
-                                className="h-6 w-6 p-0"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                              <ChevronRight className="h-4 w-4" />
-                            </div>
-                          </div>
+                        <div key={task.id} className="relative">
+                          <MainTaskEditForm
+                            task={task}
+                            disabled={loading}
+                            categories={categories}
+                            onSave={(title, description, priority, categoryId) => updateTask(task.id!, title, description, priority, categoryId)}
+                            onCancel={() => setEditingId(null)}
+                          />
                         </div>
                       )
-                    })}
-                    {subTasks.length === 0 && (
-                      <p className="text-gray-500 text-sm">暂无子任务</p>
-                    )}
-                  </div>
-                </div>
+                    }
 
-                {/* 右列：子任务的子任务 */}
-                <div className="w-1/3 p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg">
-                      {selectedSubTask ? `${selectedSubTask.title} 的子任务` : '子任务详情'}
-                    </h3>
-                    {selectedSubTask && (
-                      <Button
-                        size="sm"
-                        onClick={() => setShowSubSubTaskForm(true)}
-                        disabled={loading}
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => selectMainTask(task)}
+                        className={`p-3 border rounded cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-blue-100 border-blue-500'
+                            : isCompleted
+                              ? 'bg-gray-100 border-gray-300'
+                              : 'hover:bg-gray-50'
+                        }`}
                       >
-                        <Plus className="h-4 w-4 mr-1" />
-                        添加
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* 添加子子任务表单 */}
-                  {showSubSubTaskForm && selectedSubTask && (
-                    <div className="space-y-2 p-3 border-2 border-dashed rounded-lg mb-4">
-                      <Input
-                        placeholder="子子任务标题"
-                        value={newSubSubTaskTitle}
-                        onChange={(e) => setNewSubSubTaskTitle(e.target.value)}
-                        autoFocus
-                      />
-                      <Textarea
-                        placeholder="为什么要做这个子子任务？"
-                        value={newSubSubTaskDesc}
-                        onChange={(e) => setNewSubSubTaskDesc(e.target.value)}
-                        className="min-h-[60px]"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleAddSubSubTask}
-                          disabled={loading || !newSubSubTaskTitle.trim()}
-                        >
-                          {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                          保存
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setShowSubSubTaskForm(false)
-                            setNewSubSubTaskTitle("")
-                            setNewSubSubTaskDesc("")
-                          }}
-                          disabled={loading}
-                        >
-                          取消
-                        </Button>
+                        <div className="flex items-start gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (isCompleted) {
+                                uncompleteTask(task.id!)
+                              } else {
+                                showTaskCompletionDialog(task)
+                              }
+                            }}
+                            className="h-5 w-5 p-0"
+                          >
+                            {isCompleted ? (
+                              <CheckSquare className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <Square className="h-4 w-4 text-gray-400" />
+                            )}
+                          </Button>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : ''}`}>
+                                {task.title}
+                              </span>
+                              {task.priority && task.priority <= 5 && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                                  {task.priority}
+                                </span>
+                              )}
+                              {taskCategory && (
+                                <span
+                                  className="text-xs px-1.5 py-0.5 rounded text-white"
+                                  style={{ backgroundColor: taskCategory.color }}
+                                >
+                                  {taskCategory.name}
+                                </span>
+                              )}
+                            </div>
+                            {task.description && (
+                              <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {task.description.substring(0, 50)}{task.description.length > 50 ? '...' : ''}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingId(task.id!)
+                              }}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteTask(task.id!)
+                              }}
+                              className="h-6 w-6 p-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
+                    )
+                  })
+                }
+
+                // 具体类型视图：支持拖拽排序
+                const handleDragEnd = (event: DragEndEvent) => {
+                  const { active, over } = event
+                  if (!over || active.id === over.id) return
+
+                  const activeId = Number(active.id)
+                  const overId = Number(over.id)
+                  if (Number.isNaN(activeId) || Number.isNaN(overId)) return
+
+                  const oldIndex = mainTasks.findIndex(t => t.id === activeId)
+                  const newIndex = mainTasks.findIndex(t => t.id === overId)
+
+                  const reorderedTasks = arrayMove(mainTasks, oldIndex, newIndex)
+                  handleMainTasksReorder(taskType, reorderedTasks)
+                }
+
+                return (
+                  <DndContext
+                    sensors={dragSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={mainTasks.map(t => t.id!)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {mainTasks.map(task => {
+                        const isSelected = selectedMainTask?.id === task.id
+                        const isCompleted = task.completion?.isCompleted || false
+                        const taskCategory = task.categoryId ? categories.find(c => c.id === task.categoryId) : null
+                        const isEditing = editingId === task.id
+
+                        return (
+                          <SortableTaskItem key={task.id} id={task.id!} hideHandle={isEditing}>
+                            {isEditing ? (
+                              <MainTaskEditForm
+                                task={task}
+                                categories={categories}
+                                disabled={loading}
+                                onSave={(title, description, priority, categoryId) => updateTask(task.id!, title, description, priority, categoryId)}
+                                onCancel={() => setEditingId(null)}
+                              />
+                            ) : (
+                              <div
+                                onClick={() => selectMainTask(task)}
+                                className={`p-3 border rounded cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'bg-blue-100 border-blue-500'
+                                    : isCompleted
+                                      ? 'bg-gray-100 border-gray-300'
+                                      : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (isCompleted) {
+                                        uncompleteTask(task.id!)
+                                      } else {
+                                        showTaskCompletionDialog(task)
+                                      }
+                                    }}
+                                    className="h-5 w-5 p-0"
+                                  >
+                                    {isCompleted ? (
+                                      <CheckSquare className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Square className="h-4 w-4 text-gray-400" />
+                                    )}
+                                  </Button>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : ''}`}>
+                                        {task.title}
+                                      </span>
+                                      {task.priority && task.priority <= 5 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                                          {task.priority}
+                                        </span>
+                                      )}
+                                      {taskCategory && (
+                                        <span
+                                          className="text-xs px-1.5 py-0.5 rounded text-white"
+                                          style={{ backgroundColor: taskCategory.color }}
+                                        >
+                                          {taskCategory.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {task.description && (
+                                      <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {task.description.substring(0, 50)}{task.description.length > 50 ? '...' : ''}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setEditingId(task.id!)
+                                      }}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteTask(task.id!)
+                                      }}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </SortableTaskItem>
+                        )
+                      })}
+                    </SortableContext>
+                  </DndContext>
+                )
+              })()}
+            </div>
+          </div>
+
+          {/* 中列：子任务列表 */}
+          <div className="border rounded-lg bg-white p-4 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg">
+                子任务
+                {selectedMainTask && <span className="text-sm font-normal text-gray-500 ml-2">→ {selectedMainTask.title}</span>}
+              </h2>
+              {selectedMainTask && (
+                <Button size="sm" onClick={() => setShowSubTaskForm(true)}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  添加
+                </Button>
+              )}
+            </div>
+
+            {!selectedMainTask ? (
+              <p className="text-gray-500 text-sm">← 请选择左侧主任务</p>
+            ) : (
+              <div className="space-y-2 flex-1">
+                {showSubTaskForm && (
+                  <div className="p-3 border-2 border-dashed rounded mb-2">
+                    <Input
+                      placeholder="子任务标题"
+                      value={newSubTaskTitle}
+                      onChange={(e) => setNewSubTaskTitle(e.target.value)}
+                      autoFocus
+                      className="mb-2"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleAddSubTask} disabled={!newSubTaskTitle.trim()}>
+                        保存
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setShowSubTaskForm(false); setNewSubTaskTitle("") }}>
+                        取消
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  <div className="space-y-2">
-                    {selectedSubTask ? (
-                      subSubTasks.length > 0 ? (
-                        subSubTasks.map((subSubTask) => {
-                          const isEditing = editingSubSubTask?.id === subSubTask.id
-                          const subSubTaskCategory = subSubTask.categoryId
-                            ? categories.find(category => category.id === subSubTask.categoryId)
-                            : null
+                {subTasks.length === 0 ? (
+                  <p className="text-gray-500 text-sm">暂无子任务</p>
+                ) : (
+                  <DndContext
+                    sensors={dragSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => {
+                      const { active, over } = event
+                      if (!over || active.id === over.id) return
 
-                          if (isEditing) {
-                            return (
+                      const activeId = Number(active.id)
+                      const overId = Number(over.id)
+                      if (Number.isNaN(activeId) || Number.isNaN(overId)) return
+
+                      const oldIndex = subTasks.findIndex(t => t.id === activeId)
+                      const newIndex = subTasks.findIndex(t => t.id === overId)
+
+                      const reorderedSubTasks = arrayMove(subTasks, oldIndex, newIndex)
+                      handleSubTasksReorder(reorderedSubTasks)
+                    }}
+                  >
+                    <SortableContext
+                      items={subTasks.map(t => t.id!)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {subTasks.map(subTask => {
+                        const isSelected = selectedSubTask?.id === subTask.id
+                        const isCompleted = subTask.completion?.isCompleted || false
+                        const isEditing = editingSubTask?.id === subTask.id
+
+                        return (
+                          <SortableTaskItem key={subTask.id} id={subTask.id!} hideHandle={isEditing}>
+                            {isEditing ? (
+                              <SubTaskEditForm
+                                subTask={subTask}
+                                onSave={(title, description, priority, deadline) => updateSubTask(subTask.id!, title, description, priority, deadline)}
+                                onCancel={() => setEditingSubTask(null)}
+                                disabled={loading}
+                              />
+                            ) : (
+                              <div
+                                onClick={() => selectSubTask(subTask)}
+                                className={`p-3 border rounded cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'bg-green-100 border-green-500'
+                                    : isCompleted
+                                      ? 'bg-gray-100'
+                                      : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (isCompleted) {
+                                        uncompleteTask(subTask.id!)
+                                      } else {
+                                        showTaskCompletionDialog(subTask)
+                                      }
+                                    }}
+                                    className="h-5 w-5 p-0"
+                                  >
+                                    {isCompleted ? (
+                                      <CheckSquare className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Square className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                  <div className="flex-1">
+                                    <span className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : ''}`}>
+                                      {subTask.title}
+                                    </span>
+                                    {subTask.description && (
+                                      <p className="text-xs text-gray-600 mt-1">{subTask.description.substring(0, 40)}...</p>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        startEditSubTask(subTask)
+                                      }}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteSubTask(subTask.id!)
+                                      }}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </SortableTaskItem>
+                        )
+                      })}
+                    </SortableContext>
+                  </DndContext>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 右列：子子任务列表 */}
+          <div className="border rounded-lg bg-white p-4 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg">
+                子子任务
+                {selectedSubTask && <span className="text-sm font-normal text-gray-500 ml-2">→ {selectedSubTask.title}</span>}
+              </h2>
+              {selectedSubTask && (
+                <Button size="sm" onClick={() => setShowSubSubTaskForm(true)}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  添加
+                </Button>
+              )}
+            </div>
+
+            {!selectedSubTask ? (
+              <p className="text-gray-500 text-sm">← 请选择中间子任务</p>
+            ) : (
+              <div className="space-y-2 flex-1">
+                {showSubSubTaskForm && (
+                  <div className="p-3 border-2 border-dashed rounded mb-2">
+                    <Input
+                      placeholder="子子任务标题"
+                      value={newSubSubTaskTitle}
+                      onChange={(e) => setNewSubSubTaskTitle(e.target.value)}
+                      autoFocus
+                      className="mb-2"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleAddSubSubTask} disabled={!newSubSubTaskTitle.trim()}>
+                        保存
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setShowSubSubTaskForm(false); setNewSubSubTaskTitle("") }}>
+                        取消
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {subSubTasks.length === 0 ? (
+                  <p className="text-gray-500 text-sm">暂无子子任务</p>
+                ) : (
+                  <DndContext
+                    sensors={dragSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => {
+                      const { active, over } = event
+                      if (!over || active.id === over.id) return
+
+                      const activeId = Number(active.id)
+                      const overId = Number(over.id)
+                      if (Number.isNaN(activeId) || Number.isNaN(overId)) return
+
+                      const oldIndex = subSubTasks.findIndex(t => t.id === activeId)
+                      const newIndex = subSubTasks.findIndex(t => t.id === overId)
+
+                      const reorderedSubSubTasks = arrayMove(subSubTasks, oldIndex, newIndex)
+                      handleSubSubTasksReorder(reorderedSubSubTasks)
+                    }}
+                  >
+                    <SortableContext
+                      items={subSubTasks.map(t => t.id!)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {subSubTasks.map(subSubTask => {
+                        const isCompleted = subSubTask.completion?.isCompleted || false
+                        const isEditing = editingSubSubTask?.id === subSubTask.id
+
+                        return (
+                          <SortableTaskItem key={subSubTask.id} id={subSubTask.id!} hideHandle={isEditing}>
+                            {isEditing ? (
                               <SubSubTaskEditForm
-                                key={subSubTask.id}
                                 subSubTask={subSubTask}
                                 onSave={(title, description, priority, deadline) => updateSubSubTask(subSubTask.id!, title, description, priority, deadline)}
                                 onCancel={() => setEditingSubSubTask(null)}
                                 disabled={loading}
                               />
-                            )
-                          }
-
-                          const isCompleted = subSubTask.completion?.isCompleted || false
-
-                          return (
-                            <div
-                              key={subSubTask.id}
-                              className={`p-3 border rounded transition-colors ${
-                                isCompleted ? 'bg-gray-100 border-gray-300' : 'hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between">
+                            ) : (
+                              <div className={`p-3 border rounded ${isCompleted ? 'bg-gray-100' : 'hover:bg-gray-50'}`}>
                                 <div className="flex items-start gap-2">
                                   <Button
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => {
-                                      if (!subSubTask.id) return
                                       if (isCompleted) {
-                                        uncompleteTask(subSubTask.id)
+                                        uncompleteTask(subSubTask.id!)
                                       } else {
                                         showTaskCompletionDialog(subSubTask)
                                       }
                                     }}
-                                    disabled={loading}
-                                    className="h-6 w-6 p-0 mt-0.5"
-                                    title={isCompleted ? '取消完成' : '标记为完成'}
+                                    className="h-5 w-5 p-0"
                                   >
                                     {isCompleted ? (
-                                      <CheckSquare className="h-3 w-3 text-green-600" />
+                                      <CheckSquare className="h-4 w-4 text-green-600" />
                                     ) : (
-                                      <Square className="h-3 w-3 text-gray-400" />
+                                      <Square className="h-4 w-4" />
                                     )}
                                   </Button>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={isCompleted ? 'font-medium text-gray-500 line-through' : 'font-medium'}>
-                                        {subSubTask.title}
-                                      </span>
-                                      {subSubTask.isUnclear && (
-                                        <div className="text-orange-500" title={subSubTask.unclearReason || '该任务标记为模糊'}>
-                                          <HelpCircle className="h-3 w-3" />
-                                        </div>
-                                      )}
-                                      {subSubTaskCategory && (
-                                        <span
-                                          className="text-[10px] px-2 py-0.5 rounded-full font-medium text-white"
-                                          style={{ backgroundColor: subSubTaskCategory.color }}
-                                          title={`分类: ${subSubTaskCategory.name}`}
-                                        >
-                                          {subSubTaskCategory.name}
-                                        </span>
-                                      )}
-                                      {isCompleted && subSubTask.completion?.completionComment && (
-                                        <span title={`完成感悟: ${subSubTask.completion.completionComment}`}>
-                                          <MessageSquare className="h-3 w-3 text-gray-400" />
-                                        </span>
-                                      )}
-                                    </div>
-                                    {subSubTask.description && (
-                                      <p className={`text-xs mt-1 ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                                        {subSubTask.description}
-                                      </p>
-                                    )}
-                                    <DateDisplay
-                                      date={subSubTask.deadline}
-                                      className={`mt-1 ${isCompleted ? 'text-gray-400' : ''}`}
-                                    />
+                                  <div className="flex-1">
+                                    <span className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : ''}`}>
+                                      {subSubTask.title}
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => startEditSubSubTask(subSubTask)}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => deleteSubSubTask(subSubTask.id!)}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleToggleUnclear(subSubTask)}
-                                    className="h-6 w-6 p-0"
-                                    title={subSubTask.isUnclear ? '取消模糊标记' : '标记为模糊'}
-                                  >
-                                    <HelpCircle className={`h-3 w-3 ${subSubTask.isUnclear ? 'text-orange-500' : 'text-gray-400'}`} />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => startEditSubSubTask(subSubTask)}
-                                    className="h-6 w-6 p-0"
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => deleteSubSubTask(subSubTask.id!)}
-                                    className="h-6 w-6 p-0"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
                               </div>
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <p className="text-gray-500 text-sm">暂无子子任务</p>
-                      )
-                    ) : (
-                      <p className="text-gray-500 text-sm">请选择左侧的子任务查看详情</p>
-                    )}
-                  </div>
-                </div>
+                            )}
+                          </SortableTaskItem>
+                        )
+                      })}
+                    </SortableContext>
+                  </DndContext>
+                )}
               </div>
-            </div>
+            )}
           </div>
-        )}
-
-        {/* 模糊度标记表单 */}
-        {showUnclearForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg w-full max-w-md p-6">
-              <h3 className="text-lg font-bold mb-4">标记任务模糊状态</h3>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600 mb-2 block">
-                    为什么这个任务模糊？请具体说明：
-                  </label>
-                  <Textarea
-                    placeholder="例如：不知道使用什么工具、不清楚具体步骤、缺少相关知识等..."
-                    value={unclearReason}
-                    onChange={(e) => setUnclearReason(e.target.value)}
-                    className="min-h-[80px]"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => submitUnclearStatus(true)}
-                    disabled={loading || !unclearReason.trim()}
-                    className="flex-1"
-                  >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <HelpCircle className="h-4 w-4 mr-2" />}
-                    标记为模糊
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => submitUnclearStatus(false)}
-                    disabled={loading}
-                    className="flex-1"
-                  >
-                    取消模糊标记
-                  </Button>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowUnclearForm(false)
-                    setUnclearTaskId(null)
-                    setUnclearReason("")
-                  }}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  关闭
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 任务卡片 - 第一行3列 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <TaskCard
-            title="日常习惯"
-            description="终身性的习惯和实践（如：读书、运动）"
-            tasks={selectedCategoryFilter ? tasks.routines.filter(task => task.categoryId === selectedCategoryFilter) : tasks.routines}
-            type="routine"
-          />
-          <TaskCard
-            title="长期任务"
-            description="持续几个月到几年的项目（如：研究）"
-            tasks={selectedCategoryFilter ? tasks.longTermTasks.filter(task => task.categoryId === selectedCategoryFilter) : tasks.longTermTasks}
-            type="long-term"
-          />
-          <TaskCard
-            title="短期任务"
-            description="持续几小时到几天的任务（如：workshop）"
-            tasks={selectedCategoryFilter ? tasks.shortTermTasks.filter(task => task.categoryId === selectedCategoryFilter) : tasks.shortTermTasks}
-            type="short-term"
-          />
         </div>
-
         {/* 心愿卡片 - 第二行独立 */}
         <AspirationsCard />
       </div>

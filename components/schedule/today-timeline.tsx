@@ -164,7 +164,7 @@ export function TodayTimeline() {
   }
 
   return (
-    <Card className="border-gray-200 bg-white h-full">
+    <Card className="border-gray-200 bg-white">
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base font-semibold text-black">
           今日时间线
