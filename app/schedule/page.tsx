@@ -17,9 +17,10 @@ import { TimelineWeekView } from '@/components/schedule/timeline-week-view'
 import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
 import { QuickTaskCreateModal } from '@/components/schedule/quick-task-create-modal'
+import ScheduleAssistantDrawer from '@/components/schedule/schedule-assistant-drawer'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Clock, Plus } from 'lucide-react'
+import { ArrowLeft, Clock, Plus, Bot } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { WeekSchedule, ScheduleBlock } from '@/lib/schedule-db'
@@ -68,6 +69,15 @@ export default function SchedulePage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null)
   const [quickTaskModalOpen, setQuickTaskModalOpen] = useState(false)
   const [taskPoolRefreshToken, setTaskPoolRefreshToken] = useState(0)
+  const [assistantDrawerOpen, setAssistantDrawerOpen] = useState(false)
+  const [assistantNextStepRequired, setAssistantNextStepRequired] = useState(false)
+
+  useEffect(() => {
+    if (dayViewOpen && selectedDate) {
+      const updatedBlocks = weekSchedule[selectedDate] || []
+      setSelectedDayBlocks(updatedBlocks)
+    }
+  }, [dayViewOpen, selectedDate, weekSchedule])
 
   // Configure drag and drop sensors
   const mouseSensor = useSensor(MouseSensor, {
@@ -232,7 +242,7 @@ export default function SchedulePage() {
 
         toast({
           title: "成功",
-          description: `任务已安排到 ${scheduleBlock.date}`,
+          description: `已安排「${newBlock.title}」在 ${scheduleBlock.date}`,
         })
 
         // Clear dragged task after successful scheduling
@@ -306,7 +316,7 @@ export default function SchedulePage() {
 
   const handleBlockClick = (block: ScheduleBlock) => {
     // Handle block click - could open detail view or status change
-    console.log('Block clicked:', block.taskTitle)
+    console.log('Block clicked:', block.title)
     // For now, open day view for this date
     setSelectedDate(block.date)
     setSelectedDayBlocks(weekSchedule[block.date] || [])
@@ -346,6 +356,10 @@ export default function SchedulePage() {
       description: `已创建任务「${taskTitle}」`
     })
   }
+
+  const handleAssistantScheduleUpdated = useCallback(() => {
+    void fetchWeekSchedule()
+  }, [fetchWeekSchedule])
 
   const handleUpdateBlockStatus = async (blockId: number, status: ScheduleBlock['status']) => {
     try {
@@ -412,9 +426,9 @@ export default function SchedulePage() {
             updated[date] = updated[date].map(block =>
               block.id === blockId ? {
                 ...block,
-                categoryId: categoryId === null ? undefined : categoryId,
-                categoryName: category?.name ?? undefined,
-                categoryColor: category?.color ?? undefined
+                categoryId: categoryId === null ? null : categoryId,
+                categoryName: category?.name ?? null,
+                categoryColor: category?.color ?? null
               } : block
             )
           })
@@ -426,9 +440,9 @@ export default function SchedulePage() {
           prev.map(block =>
             block.id === blockId ? {
               ...block,
-              categoryId: categoryId === null ? undefined : categoryId,
-              categoryName: category?.name ?? undefined,
-              categoryColor: category?.color ?? undefined
+              categoryId: categoryId === null ? null : categoryId,
+              categoryName: category?.name ?? null,
+              categoryColor: category?.color ?? null
             } : block
           )
         )
@@ -512,21 +526,33 @@ export default function SchedulePage() {
     >
       <div className="container mx-auto px-4 py-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/')}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            返回主页
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">日程安排</h1>
-            <p className="text-gray-600 mt-1">
-              拖拽子子任务到日程中进行精确时间管理
-            </p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              onClick={() => router.push('/')}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              返回主页
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">日程安排</h1>
+              <p className="text-gray-600 mt-1">
+                拖拽子子任务到日程中进行精确时间管理
+              </p>
+            </div>
           </div>
+          <Button
+            onClick={() => setAssistantDrawerOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Bot className="w-4 h-4 mr-2" />
+            AI 助手
+            {assistantNextStepRequired && (
+              <span className="ml-2 h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+            )}
+          </Button>
         </div>
 
         {/* Main Content */}
@@ -662,6 +688,17 @@ export default function SchedulePage() {
           onUpdateCategory={handleUpdateBlockCategory}
           onEditBlock={handleEditBlock}
           onDeleteBlock={handleDeleteBlock}
+        />
+
+        {/* Schedule AI Assistant Drawer */}
+        <ScheduleAssistantDrawer
+          isOpen={assistantDrawerOpen}
+          onClose={() => {
+            setAssistantDrawerOpen(false)
+            setAssistantNextStepRequired(false)
+          }}
+          onScheduleUpdated={handleAssistantScheduleUpdated}
+          onNextStepChange={setAssistantNextStepRequired}
         />
       </div>
     </DndContext>

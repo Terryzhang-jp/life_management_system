@@ -165,7 +165,7 @@ export function DayView({
                   {formatDate(date)}
                 </CardTitle>
                 <div className="text-sm text-gray-600 mt-1">
-                  {totalBlocks} 个任务 · {completedBlocks} 已完成
+                  {totalBlocks} 个日程 · {completedBlocks} 已完成
                 </div>
               </div>
             </div>
@@ -177,8 +177,8 @@ export function DayView({
           {blocks.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-gray-400">
               <div className="text-center">
-                <div className="text-lg">这一天还没有安排任务</div>
-                <div className="text-sm mt-1">从左侧任务池拖拽任务到日程中</div>
+                <div className="text-lg">这一天还没有安排日程</div>
+                <div className="text-sm mt-1">从左侧任务池拖拽日程或快速创建事件</div>
               </div>
             </div>
           ) : (
@@ -330,7 +330,7 @@ export function DayView({
 
                         {/* For minimal blocks, wrap entire block in Tooltip */}
                         {displayLevel === 'minimal' ? (
-                          <Tooltip content={`${block.taskTitle} (${block.startTime} - ${block.endTime})`}>
+                          <Tooltip content={`${block.title} (${block.startTime} - ${block.endTime})`}>
                             <div className="w-full h-full"></div>
                           </Tooltip>
                         ) : (
@@ -347,12 +347,12 @@ export function DayView({
 
                               {/* Task title with category badge - always show except for 'minimal' */}
                               <div className="flex items-start gap-1 w-full">
-                                  <Tooltip content={block.taskTitle}>
+                                  <Tooltip content={block.title}>
                                     <div className={cn(
                                       "flex-1 font-medium text-gray-900 leading-tight break-words",
                                       displayLevel === 'title-only' ? "text-xs line-clamp-3" : "text-sm line-clamp-2"
                                     )}>
-                                      {block.taskTitle}
+                                      {block.title}
                                     </div>
                                   </Tooltip>
                                   {/* Category badge for all levels except minimal */}

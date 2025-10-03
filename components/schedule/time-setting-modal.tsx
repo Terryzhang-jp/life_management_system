@@ -93,7 +93,7 @@ export function TimeSettingModal({
         setStartTime(existingBlock.startTime)
         setEndTime(existingBlock.endTime)
         setComment(existingBlock.comment || '')
-        setCategoryId(existingBlock.categoryId || null)
+        setCategoryId(existingBlock.categoryId ?? null)
         setQuickTitle('')
         setCurrentConflicts([])
       } else {
@@ -101,7 +101,7 @@ export function TimeSettingModal({
         setStartTime(suggestedStartTime)
         setEndTime(suggestedEndTime)
         setComment('')
-        setCategoryId(task?.categoryId || null)  // Use task's category if available
+        setCategoryId(task?.categoryId ?? null)  // Use task's category if available
         setQuickTitle('')
         setCurrentConflicts([])
       }
@@ -200,26 +200,31 @@ export function TimeSettingModal({
     } else if (mode === 'create') {
       if (quickCreate && !task) {
         // Quick create mode - create standalone schedule without task
-        if (!quickTitle.trim()) return  // Title is required for quick create
+        const trimmedTitle = quickTitle.trim()
+        if (!trimmedTitle) return  // Title is required for quick create
 
         const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
-          taskId: 0,  // Special ID for standalone schedules
+          type: 'event',
+          title: trimmedTitle,
           date,
           startTime,
           endTime,
           comment: comment.trim() || undefined,
           status: 'scheduled',
-          taskTitle: quickTitle.trim(),  // Use the quick create title
-          parentTitle: undefined,
-          grandparentTitle: undefined,
-          categoryId: categoryId === null ? undefined : categoryId,
-          categoryName: category?.name ?? undefined,
-          categoryColor: category?.color ?? undefined
+          taskId: null,
+          taskTitle: null,
+          parentTitle: null,
+          grandparentTitle: null,
+          categoryId: categoryId === null ? null : categoryId,
+          categoryName: category?.name ?? null,
+          categoryColor: category?.color ?? null
         }
         onConfirm(scheduleBlock)
       } else if (task) {
         // Create mode with task - create new block
         const scheduleBlock: Omit<ScheduleBlock, 'id'> = {
+          type: 'task',
+          title: task.title,
           taskId: task.id,
           date,
           startTime,
@@ -227,11 +232,11 @@ export function TimeSettingModal({
           comment: comment.trim() || undefined,
           status: 'scheduled',
           taskTitle: task.title,
-          parentTitle: task.parentTitle || undefined,
-          grandparentTitle: task.grandparentTitle || undefined,
-          categoryId: categoryId === null ? undefined : categoryId,
-          categoryName: category?.name ?? undefined,
-          categoryColor: category?.color ?? undefined
+          parentTitle: task.parentTitle || null,
+          grandparentTitle: task.grandparentTitle || null,
+          categoryId: categoryId === null ? null : categoryId,
+          categoryName: category?.name ?? null,
+          categoryColor: category?.color ?? null
         }
         onConfirm(scheduleBlock)
       }
@@ -266,7 +271,7 @@ export function TimeSettingModal({
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg font-semibold">
-              {mode === 'edit' ? '编辑任务时间' : '安排任务时间'}
+              {mode === 'edit' ? '编辑日程' : '安排日程'}
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-4 h-4" />
@@ -278,10 +283,10 @@ export function TimeSettingModal({
           {/* Quick Create Title Input or Task Info */}
           {quickCreate && !task ? (
             <div className="space-y-2">
-              <Label htmlFor="quickTitle">任务名称 *</Label>
+              <Label htmlFor="quickTitle">日程标题 *</Label>
               <Input
                 id="quickTitle"
-                placeholder="输入任务名称（如：开会、休息、学习）"
+                placeholder="输入日程标题（如：开会、休息、学习）"
                 value={quickTitle}
                 onChange={(e) => setQuickTitle(e.target.value)}
                 className="w-full"
@@ -292,12 +297,13 @@ export function TimeSettingModal({
             <div className="p-3 bg-gray-50 rounded-lg">
               {mode === 'edit' && existingBlock ? (
                 <div>
-                  <div className="font-medium text-gray-900">{existingBlock.taskTitle}</div>
+                  <div className="font-medium text-gray-900">{existingBlock.title}</div>
                   <div className="text-sm text-gray-600 mt-1">
-                    {existingBlock.grandparentTitle && existingBlock.parentTitle
-                      ? `${existingBlock.grandparentTitle} › ${existingBlock.parentTitle}`
-                      : existingBlock.parentTitle
-                    }
+                    {existingBlock.type === 'task'
+                      ? existingBlock.grandparentTitle && existingBlock.parentTitle
+                        ? `${existingBlock.grandparentTitle} › ${existingBlock.parentTitle}`
+                        : existingBlock.parentTitle
+                      : '临时事件'}
                   </div>
                 </div>
               ) : task ? (
@@ -418,7 +424,7 @@ export function TimeSettingModal({
               <div className="space-y-1">
                 {currentConflicts.map((conflict) => (
                   <div key={conflict.id} className="text-sm text-red-700">
-                    {conflict.startTime} - {conflict.endTime}: {conflict.taskTitle}
+                    {conflict.startTime} - {conflict.endTime}: {conflict.title}
                   </div>
                 ))}
               </div>

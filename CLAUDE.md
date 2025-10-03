@@ -296,15 +296,20 @@ interface Thought {
 ```typescript
 interface ScheduleBlock {
   id?: number
-  taskId: number           // 关联的任务ID
+  type: 'task' | 'event'   // 日程类型：任务或临时事件
+  title: string            // 展示标题
+  taskId?: number | null   // 关联的任务ID（事件可为空）
   date: string            // 日期 (YYYY-MM-DD)
   startTime: string       // 开始时间 (HH:MM)
   endTime: string         // 结束时间 (HH:MM)
   comment?: string        // 备注信息
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
-  taskTitle: string       // 任务标题（冗余字段，用于性能）
-  parentTitle?: string    // 父任务标题
-  grandparentTitle?: string // 祖父任务标题
+  status: 'scheduled' | 'in_progress' | 'partially_completed' | 'completed' | 'cancelled'
+  taskTitle?: string | null       // 任务标题（冗余，事件可为空）
+  parentTitle?: string | null     // 父任务标题
+  grandparentTitle?: string | null // 祖父任务标题
+  categoryId?: number | null
+  categoryName?: string | null
+  categoryColor?: string | null
   createdAt?: string
   updatedAt?: string
 }

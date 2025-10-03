@@ -180,7 +180,7 @@ function TimeSlotDropZone({
             }}
           >
             {displayLevel === 'minimal' ? (
-              <Tooltip content={`${block.taskTitle} (${block.startTime} - ${block.endTime})`}>
+              <Tooltip content={`${block.title} (${block.startTime} - ${block.endTime})`}>
                 <div className="w-full h-full" />
               </Tooltip>
             ) : (
@@ -192,8 +192,7 @@ function TimeSlotDropZone({
                         {block.startTime.slice(0, 5)} - {block.endTime.slice(0, 5)}
                       </div>
                     )}
-
-                    <Tooltip content={block.taskTitle}>
+                    <Tooltip content={block.title}>
                       <div
                         className={cn(
                           'w-full font-medium text-gray-900 leading-tight break-words overflow-hidden',
@@ -205,7 +204,7 @@ function TimeSlotDropZone({
                           maxWidth: '100%'
                         }}
                       >
-                        {block.taskTitle}
+                        {block.title}
                       </div>
                     </Tooltip>
 

@@ -4,7 +4,9 @@ import {
   updateScheduleBlock,
   deleteScheduleBlock,
   getScheduleBlockById,
-  ScheduleBlock
+  ScheduleBlock,
+  CreateScheduleBlockInput,
+  ScheduleBlockType
 } from '@/lib/schedule-db'
 import tasksDbManager from '@/lib/tasks-db'
 import type { Task } from '@/lib/tasks-db'
@@ -54,10 +56,48 @@ const syncTaskCompletion = (taskId: number) => {
 // Create a new schedule block
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as ScheduleBlock
+    const body = await request.json() as Partial<ScheduleBlock>
+
+    if (!body.date || !body.startTime || !body.endTime) {
+      return NextResponse.json({ error: 'date, startTime and endTime are required' }, { status: 400 })
+    }
+
+    const normalizedTaskId = typeof body.taskId === 'number' && body.taskId > 0 ? body.taskId : undefined
+    const blockType: ScheduleBlockType = (body.type as ScheduleBlockType | undefined) ?? (normalizedTaskId ? 'task' : 'event')
+
+    const rawTitle = (body.title ?? body.taskTitle ?? '').trim()
+
+    if (blockType === 'task' && !normalizedTaskId) {
+      return NextResponse.json({ error: 'taskId is required when type is task' }, { status: 400 })
+    }
+
+    if (!rawTitle && blockType === 'event') {
+      return NextResponse.json({ error: 'title is required for event schedules' }, { status: 400 })
+    }
+
+    const finalTitle = blockType === 'task'
+      ? (body.taskTitle ?? rawTitle ?? '未命名日程')
+      : rawTitle
+
+    const payload: CreateScheduleBlockInput = {
+      type: blockType,
+      title: finalTitle,
+      date: body.date,
+      startTime: body.startTime,
+      endTime: body.endTime,
+      comment: body.comment,
+      status: body.status,
+      taskId: blockType === 'task' ? normalizedTaskId : undefined,
+      taskTitle: blockType === 'task' ? (body.taskTitle ?? finalTitle) : undefined,
+      parentTitle: blockType === 'task' ? (body.parentTitle ?? undefined) : undefined,
+      grandparentTitle: blockType === 'task' ? (body.grandparentTitle ?? undefined) : undefined,
+      categoryId: body.categoryId ?? undefined,
+      categoryName: body.categoryName ?? undefined,
+      categoryColor: body.categoryColor ?? undefined
+    }
 
     // Allow overlapping time blocks - no conflict checking
-    const newBlock = createScheduleBlock(body)
+    const newBlock = createScheduleBlock(payload)
     return NextResponse.json(newBlock, { status: 201 })
   } catch (error) {
     console.error('Error creating schedule block:', error)
@@ -86,11 +126,34 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json() as Partial<ScheduleBlock>
-    const newStatus = body.status ?? existingBlock.status
-    const statusChanged = body.status !== undefined && body.status !== existingBlock.status
+    const updates: Partial<ScheduleBlock> = { ...body }
+
+    if (updates.title !== undefined && typeof updates.title === 'string') {
+      updates.title = updates.title.trim()
+    }
+
+    if (updates.taskId !== undefined) {
+      updates.taskId = typeof updates.taskId === 'number' && updates.taskId > 0 ? updates.taskId : null
+    }
+
+    if (updates.type === 'event') {
+      updates.taskId = null
+      if (updates.taskTitle === undefined) {
+        updates.taskTitle = null
+      }
+      if (updates.parentTitle === undefined) {
+        updates.parentTitle = null
+      }
+      if (updates.grandparentTitle === undefined) {
+        updates.grandparentTitle = null
+      }
+    }
+
+    const newStatus = updates.status ?? existingBlock.status
+    const statusChanged = updates.status !== undefined && updates.status !== existingBlock.status
 
     // Allow overlapping time blocks - no conflict checking
-    updateScheduleBlock(blockId, body)
+    updateScheduleBlock(blockId, updates)
 
     try {
       if (

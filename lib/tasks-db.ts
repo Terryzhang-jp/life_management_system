@@ -9,6 +9,7 @@ export interface Task {
   title: string
   description?: string
   priority?: number  // 重要度排名，数字越小越重要
+  sortOrder?: number  // 手动排序顺序
   parentId?: number  // 父任务ID，用于建立层级关系
   level?: number     // 任务层级：0=主任务，1=子任务，2=子子任务
   deadline?: string  // 截止日期 (仅子任务和子子任务)
@@ -17,6 +18,7 @@ export interface Task {
   hasUnclearChildren?: boolean  // 是否有模糊的子任务(用于传播显示)
   categoryId?: number  // 任务分类ID
   isCompleted?: boolean  // 是否已完成（软删除标记）
+  completedAt?: string  // 完成时间
   createdAt?: string
   updatedAt?: string
 }
@@ -129,6 +131,9 @@ class TasksDatabaseManager {
       if (!hasColumn('is_completed')) {
         db.exec('ALTER TABLE tasks ADD COLUMN is_completed BOOLEAN DEFAULT 0')
       }
+      if (!hasColumn('completed_at')) {
+        db.exec('ALTER TABLE tasks ADD COLUMN completed_at TEXT')
+      }
     } catch (error) {
       console.log('Column migration error:', error)
     }
@@ -152,6 +157,7 @@ class TasksDatabaseManager {
       title: row.title,
       description: row.description || '',
       priority: row.priority ?? 999,
+      sortOrder: row.sort_order ?? undefined,
       parentId: row.parent_id || undefined,
       level: row.level ?? 0,
       deadline: row.deadline || undefined,
@@ -159,6 +165,8 @@ class TasksDatabaseManager {
       unclearReason: row.unclear_reason || '',
       hasUnclearChildren: Boolean(hasUnclearChildrenRow),
       categoryId: (row.category_id ?? this.resolveInheritedCategory(db, row.parent_id)) || undefined,
+      isCompleted: Boolean(row.is_completed),
+      completedAt: row.completed_at || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -167,7 +175,7 @@ class TasksDatabaseManager {
   async getAllTasks(): Promise<TasksData> {
     const db = this.getDb()
     // 只获取未完成的主任务（level = 0 或 level 为空，且未完成）
-    const rows = db.prepare('SELECT * FROM tasks WHERE (level = 0 OR level IS NULL) AND (is_completed = 0 OR is_completed IS NULL) ORDER BY priority ASC, created_at DESC').all() as any[]
+    const rows = db.prepare('SELECT * FROM tasks WHERE (level = 0 OR level IS NULL) AND (is_completed = 0 OR is_completed IS NULL) ORDER BY sort_order ASC, created_at DESC').all() as any[]
 
     const tasksData: TasksData = {
       routines: [],
@@ -182,6 +190,7 @@ class TasksDatabaseManager {
         title: row.title,
         description: row.description || '',
         priority: row.priority || 999,
+        sortOrder: row.sort_order ?? undefined,
         parentId: row.parent_id,
         level: row.level || 0,
         deadline: row.deadline || undefined,
@@ -204,11 +213,6 @@ class TasksDatabaseManager {
           break
       }
     })
-
-    // 对每个类型内部按优先级排序
-    tasksData.routines.sort((a, b) => (a.priority || 999) - (b.priority || 999))
-    tasksData.longTermTasks.sort((a, b) => (a.priority || 999) - (b.priority || 999))
-    tasksData.shortTermTasks.sort((a, b) => (a.priority || 999) - (b.priority || 999))
 
     return tasksData
   }
@@ -285,6 +289,10 @@ class TasksDatabaseManager {
       updates.push('is_completed = ?')
       values.push(task.isCompleted ? 1 : 0)
     }
+    if (task.sortOrder !== undefined) {
+      updates.push('sort_order = ?')
+      values.push(task.sortOrder)
+    }
 
     if (updates.length > 0) {
       updates.push('updated_at = CURRENT_TIMESTAMP')
@@ -296,6 +304,16 @@ class TasksDatabaseManager {
         WHERE id = ?
       `).run(...values)
     }
+  }
+
+  // 批量更新任务排序
+  async updateTasksOrder(taskOrders: Array<{ id: number; sortOrder: number }>): Promise<void> {
+    const db = this.getDb()
+    const stmt = db.prepare('UPDATE tasks SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+
+    taskOrders.forEach(({ id, sortOrder }) => {
+      stmt.run(sortOrder, id)
+    })
   }
 
   async deleteTask(id: number): Promise<void> {
@@ -315,7 +333,7 @@ class TasksDatabaseManager {
       LEFT JOIN tasks p ON t.parent_id = p.id
       LEFT JOIN tasks gp ON p.parent_id = gp.id
       WHERE t.parent_id = ? AND t.level = ? AND (t.is_completed = 0 OR t.is_completed IS NULL)
-      ORDER BY t.priority ASC, t.created_at DESC
+      ORDER BY t.sort_order ASC, t.created_at DESC
     `).all(parentId, level) as any[]
 
     return rows.map(row => ({
@@ -324,6 +342,7 @@ class TasksDatabaseManager {
       title: row.title,
       description: row.description || '',
       priority: row.priority || 999,
+      sortOrder: row.sort_order ?? undefined,
       parentId: row.parent_id,
       level: row.level || 0,
       deadline: row.deadline || undefined,
@@ -796,6 +815,38 @@ class TasksDatabaseManager {
     return dueTasks
   }
 
+  // 标记任务为已完成
+  async completeTask(id: number): Promise<Task | null> {
+    const db = this.getDb()
+    const now = new Date().toISOString()
+
+    db.prepare(`
+      UPDATE tasks
+      SET is_completed = 1,
+          completed_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(now, now, id)
+
+    return this.getTask(id)
+  }
+
+  // 取消任务完成状态
+  async uncompleteTask(id: number): Promise<Task | null> {
+    const db = this.getDb()
+    const now = new Date().toISOString()
+
+    db.prepare(`
+      UPDATE tasks
+      SET is_completed = 0,
+          completed_at = NULL,
+          updated_at = ?
+      WHERE id = ?
+    `).run(now, id)
+
+    return this.getTask(id)
+  }
+
   close() {
     if (this.db) {
       this.db.close()
@@ -819,6 +870,11 @@ export function getSchedulableRoutines() {
 // Get tasks due within next N days
 export function getTasksDueSoon(days: number = 2) {
   return tasksDbManager.getTasksDueSoon(days)
+}
+
+// Update tasks order
+export function updateTasksOrder(taskOrders: Array<{ id: number; sortOrder: number }>) {
+  return tasksDbManager.updateTasksOrder(taskOrders)
 }
 
 export default tasksDbManager

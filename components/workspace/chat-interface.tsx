@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import MessageItem from "./message-item"
 import PendingActionCard from "./pending-action-card"
+import PlanPreviewCard, { ExecutionPlan } from "./plan-preview-card"
 import { PendingTaskAction } from "@/lib/workspace/task-tools"
 import {
   ConversationState,
@@ -19,8 +20,13 @@ import {
   clearFocusTask,
   checkExpiry
 } from "@/lib/workspace/conversation-state"
+import { Note } from "@/lib/notes-db"
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  activeNote?: Note | null
+}
+
+export default function ChatInterface({ activeNote }: ChatInterfaceProps) {
   const { toast } = useToast()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -28,6 +34,8 @@ export default function ChatInterface() {
   const [streamingMessage, setStreamingMessage] = useState('')
   const [enableEdit, setEnableEdit] = useState(false)  // 编辑模式开关
   const [pendingActions, setPendingActions] = useState<PendingTaskAction[]>([])  // 待确认的操作
+  const [currentPlan, setCurrentPlan] = useState<ExecutionPlan | null>(null)  // 当前待确认的计划
+  const [executionResult, setExecutionResult] = useState<{ success: boolean; message: string } | null>(null)  // 执行结果
   const [conversationState, setConversationState] = useState<ConversationState>(initializeState())
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -91,6 +99,15 @@ export default function ChatInterface() {
 
     try {
       console.log('Calling API...')
+
+      // 构建当前笔记上下文
+      const activeNoteContext = activeNote ? {
+        id: activeNote.id,
+        title: activeNote.title,
+        content: activeNote.content,
+        createdAt: activeNote.createdAt
+      } : null
+
       // 调用流式API
       const response = await fetch('/api/workspace-assistant/chat', {
         method: 'POST',
@@ -99,7 +116,8 @@ export default function ChatInterface() {
           message: userMessage,
           history: messages,
           enableEdit,  // 传递编辑模式状态
-          state: conversationState  // 传递对话状态
+          state: conversationState,  // 传递对话状态
+          activeNoteContext  // 传递当前笔记上下文
         })
       })
 
@@ -194,6 +212,44 @@ export default function ChatInterface() {
                 if (data.type === 'state_update' && data.state) {
                   console.log('State update received:', data.state)
                   setConversationState(data.state)
+                }
+
+                // 处理计划生成
+                if (data.type === 'plan' && data.plan) {
+                  console.log('Plan received:', data.plan)
+                  setCurrentPlan(data.plan)
+                  // 显示计划已生成的提示
+                  toast({
+                    title: '计划已生成',
+                    description: '请查看并确认执行计划'
+                  })
+                }
+
+                // 处理执行完成
+                if (data.type === 'execution_complete') {
+                  console.log('Execution complete:', data)
+                  const success = data.success
+                  const message = success ? data.summary : data.error
+
+                  setExecutionResult({
+                    success,
+                    message: message || (success ? '执行成功' : '执行失败')
+                  })
+
+                  // 显示执行结果提示
+                  toast({
+                    title: success ? '执行成功' : '执行失败',
+                    description: message,
+                    variant: success ? 'default' : 'destructive'
+                  })
+
+                  // 清除当前计划
+                  setCurrentPlan(null)
+
+                  // 3秒后清除执行结果
+                  setTimeout(() => {
+                    setExecutionResult(null)
+                  }, 3000)
                 }
 
               } catch (parseError) {
@@ -322,6 +378,122 @@ export default function ChatInterface() {
     })
   }
 
+  // 确认执行计划
+  const handleConfirmPlan = async () => {
+    if (!currentPlan) return
+
+    try {
+      setLoading(true)
+      setExecutionResult(null)
+
+      console.log('Executing plan:', currentPlan)
+
+      // 发送包含 planToExecute 的请求
+      const response = await fetch('/api/workspace-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: '执行计划',
+          history: messages,
+          enableEdit: true,
+          state: conversationState,
+          planToExecute: currentPlan  // 传递计划
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '执行计划失败')
+      }
+
+      // 处理流式响应
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No reader available')
+      }
+
+      let done = false
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+
+        if (value) {
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                console.log('[PLAN EXECUTION] Received event:', data.type, data)
+
+                if (data.type === 'error' || data.error) {
+                  console.error('Execution error:', data.error)
+                  throw new Error(data.error)
+                }
+
+                // 处理执行完成事件（已在上面的 SSE 处理中统一处理）
+                if (data.type === 'execution_complete') {
+                  const success = data.success
+                  const message = success ? data.summary : data.error
+
+                  setExecutionResult({
+                    success,
+                    message: message || (success ? '执行成功' : '执行失败')
+                  })
+
+                  toast({
+                    title: success ? '执行成功' : '执行失败',
+                    description: message,
+                    variant: success ? 'default' : 'destructive'
+                  })
+
+                  setCurrentPlan(null)
+
+                  setTimeout(() => {
+                    setExecutionResult(null)
+                  }, 3000)
+
+                  done = true
+                  break
+                }
+              } catch (parseError) {
+                console.error('Parse error:', parseError, 'Line:', line)
+              }
+            }
+          }
+        }
+      }
+
+    } catch (error: any) {
+      console.error('Plan execution error:', error)
+      toast({
+        title: '执行失败',
+        description: error.message || '请稍后重试',
+        variant: 'destructive'
+      })
+
+      setExecutionResult({
+        success: false,
+        message: error.message || '执行失败'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 取消计划
+  const handleCancelPlan = () => {
+    setCurrentPlan(null)
+    toast({
+      title: '已取消',
+      description: '执行计划已取消'
+    })
+  }
+
   return (
     <Card className="h-full flex flex-col overflow-hidden">
       <CardHeader className="flex-shrink-0 border-b">
@@ -404,6 +576,33 @@ export default function ChatInterface() {
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* 计划预览区域 */}
+        {currentPlan && (
+          <div className="flex-shrink-0 p-4 border-t bg-blue-50 space-y-2">
+            <p className="text-sm font-medium text-blue-700 mb-2">
+              执行计划
+            </p>
+            <PlanPreviewCard
+              plan={currentPlan}
+              onConfirm={handleConfirmPlan}
+              onCancel={handleCancelPlan}
+              loading={loading}
+            />
+          </div>
+        )}
+
+        {/* 执行结果显示 */}
+        {executionResult && (
+          <div className={`flex-shrink-0 p-4 border-t ${executionResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+            <p className={`text-sm font-medium mb-2 ${executionResult.success ? 'text-green-700' : 'text-red-700'}`}>
+              {executionResult.success ? '✅ 执行成功' : '❌ 执行失败'}
+            </p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+              {executionResult.message}
+            </p>
+          </div>
+        )}
 
         {/* 待确认操作区域 */}
         {pendingActions.length > 0 && (

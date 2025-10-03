@@ -232,7 +232,7 @@ export default function NotesWorkspace() {
 
         {/* 右侧：AI聊天助手 */}
         <div className="flex-1 min-w-0 bg-gray-50 overflow-hidden">
-          <ChatInterface />
+          <ChatInterface activeNote={activeNote} />
         </div>
       </div>
     </div>

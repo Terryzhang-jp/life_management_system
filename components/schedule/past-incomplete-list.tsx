@@ -16,7 +16,8 @@ interface PastBlock {
   startTime: string
   endTime: string
   status: ScheduleStatus
-  taskTitle: string
+  title: string
+  taskTitle?: string | null
   parentTitle?: string
   grandparentTitle?: string
   comment?: string
@@ -179,7 +180,7 @@ export function PastIncompleteList() {
                   >
                     <div className="flex flex-col gap-1">
                       <div className="text-sm font-medium text-gray-900">
-                        {item.taskTitle}
+                        {item.title}
                       </div>
                       {(item.parentTitle || item.grandparentTitle) && (
                         <div className="text-xs text-gray-500">

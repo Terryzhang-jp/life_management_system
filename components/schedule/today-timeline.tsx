@@ -13,7 +13,8 @@ interface TimelineBlock {
   startTime: string
   endTime: string
   status: ScheduleStatus
-  taskTitle: string
+  title: string
+  taskTitle?: string | null
   parentTitle?: string
   grandparentTitle?: string
   comment?: string
@@ -134,7 +135,7 @@ export function TodayTimeline() {
                       "text-sm font-medium text-gray-900",
                       isPast && !isCurrent && "text-gray-500"
                     )}>
-                      {block.taskTitle}
+                      {block.title}
                     </div>
                     {(block.parentTitle || block.grandparentTitle) && (
                       <div className="text-xs text-gray-500 mt-1">

@@ -101,7 +101,7 @@ function DayDropZone({ date, blocks = [], onDayClick }: DayDropZoneProps) {
               'h-full rounded border-2 border-dashed flex items-center justify-center',
               isOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200'
             )}>
-              <span className="text-xs text-gray-400">拖拽任务到这里</span>
+              <span className="text-xs text-gray-400">拖拽任务或创建事件</span>
             </div>
           ) : (
             blocks.slice(0, 3).map((block) => (
@@ -112,7 +112,7 @@ function DayDropZone({ date, blocks = [], onDayClick }: DayDropZoneProps) {
                   getStatusColor(block.status)
                 )}
               >
-                <div className="font-medium truncate">{block.taskTitle}</div>
+                <div className="font-medium truncate">{block.title}</div>
                 <div className="text-xs opacity-75">
                   {block.startTime} - {block.endTime}
                 </div>

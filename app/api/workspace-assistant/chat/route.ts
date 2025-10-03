@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server'
 import { contextToMarkdown, formatWorkspaceContext } from '@/lib/workspace/context-formatter'
 import { SYSTEM_PROMPT } from '@/lib/workspace/system-prompt'
-import { streamText, tool } from 'ai'
+import { streamText } from 'ai'
 import { google } from '@ai-sdk/google'
-import { CreateTaskSchema, UpdateTaskSchema } from '@/lib/workspace/task-tools'
+import { taskTools } from '@/lib/workspace/tools'
+import { generatePlan } from '@/lib/workspace/planner'
+import { executePlan } from '@/lib/workspace/executor'
 import tasksDbManager from '@/lib/tasks-db'
 import {
   ConversationState,
@@ -263,9 +265,11 @@ async function enrichToolCallArgs(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, history, enableEdit = false, state: clientState } = body
+    const { message, history, enableEdit = false, state: clientState, activeNoteContext, planToExecute } = body
 
     console.log('[Chat API] enableEdit:', enableEdit, 'message:', message)
+    console.log('[Chat API] planToExecute:', planToExecute ? 'Yes' : 'No')
+    console.log('[Chat API] activeNoteContext:', activeNoteContext ? `Note: ${activeNoteContext.title}` : 'No active note')
 
     if (!message || typeof message !== 'string') {
       return new Response(
@@ -291,6 +295,100 @@ export async function POST(request: NextRequest) {
     const context = await formatWorkspaceContext()
     const contextMarkdown = contextToMarkdown(context)
 
+    const encoder = new TextEncoder()
+
+    // ========== Plan-Then-Execute 流程 ==========
+
+    // 分支1：如果请求包含计划，执行计划
+    if (planToExecute && enableEdit) {
+      console.log('[AI Agent] Executing plan...')
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (payload: any) => {
+            controller.enqueue(encodeSse(payload, encoder))
+          }
+
+          try {
+            // 执行计划
+            const result = await executePlan(planToExecute)
+
+            if (result.success) {
+              send({ type: 'content', content: `✅ ${result.summary}`, done: false })
+              send({ type: 'execution_complete', success: true, summary: result.summary, logs: result.context.logs })
+            } else {
+              send({ type: 'content', content: `❌ 执行失败: ${result.error}`, done: false })
+              send({ type: 'execution_complete', success: false, error: result.error, failedStep: result.failedStep })
+            }
+
+            send({ type: 'content', content: '', done: true })
+            controller.close()
+          } catch (error: any) {
+            console.error('[AI Agent] Execution error:', error)
+            send({ type: 'error', error: error.message })
+            controller.close()
+          }
+        }
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
+        }
+      })
+    }
+
+    // 分支2：使用LLM判断是否为多步骤指令
+    if (enableEdit) {
+      console.log('[AI Agent] Checking if multi-step instruction...')
+
+      try {
+        // 让Gemini生成计划并判断是否为多步骤
+        const plan = await generatePlan(message, {
+          taskContext: contextMarkdown,
+          conversationHistory: history
+        })
+
+        console.log('[AI Agent] Plan generated:', { isMultiStep: plan.isMultiStep, steps: plan.steps.length })
+
+        // 如果是多步骤指令，返回计划供用户确认
+        if (plan.isMultiStep && plan.steps.length > 1) {
+          console.log('[AI Agent] Multi-step detected, returning plan for confirmation')
+
+          const stream = new ReadableStream({
+            async start(controller) {
+              const send = (payload: any) => {
+                controller.enqueue(encodeSse(payload, encoder))
+              }
+
+              send({ type: 'plan', plan })
+              send({ type: 'content', content: '', done: true })
+              controller.close()
+            }
+          })
+
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
+            }
+          })
+        }
+
+        // 如果是单步骤，继续走原有的单步骤流程
+        console.log('[AI Agent] Single-step detected, continuing to normal flow')
+      } catch (error: any) {
+        console.error('[AI Agent] Planning error:', error)
+        // 如果判断失败，继续原有流程
+        console.log('[AI Agent] Falling back to normal flow due to error')
+      }
+    }
+
+    // ========== 原有的单步骤流程 ==========
+
     // 2. 构建消息历史
     const messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [
       {
@@ -302,6 +400,18 @@ export async function POST(request: NextRequest) {
         content: `以下是用户的完整任务上下文数据：\n\n${contextMarkdown}`
       }
     ]
+
+    // 添加当前笔记上下文（如果有）
+    if (activeNoteContext && activeNoteContext.content) {
+      const noteMarkdown = `## 📝 当前笔记窗口\n\n**笔记标题**：${activeNoteContext.title}\n**创建时间**：${activeNoteContext.createdAt ? new Date(activeNoteContext.createdAt).toLocaleDateString('zh-CN') : '未知'}\n\n**笔记内容**：\n\n${activeNoteContext.content}\n\n---\n\n这是用户当前正在查看和编辑的思维整理笔记。你可以基于笔记内容理解用户的思考过程，并提供相关的建议和分析。`
+
+      messages.push({
+        role: 'system',
+        content: noteMarkdown
+      })
+
+      console.log('[Chat API] Added note context to messages')
+    }
 
     // 注入对话状态上下文（如果有）
     const stateContext = buildContextPrompt(conversationState)
@@ -334,21 +444,9 @@ export async function POST(request: NextRequest) {
     // 3. API Key
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY
 
-    const encoder = new TextEncoder()
     const combinedHistory = [...(history ?? []), { role: 'user', content: message }]
 
-    const tools = enableEdit
-      ? {
-          create_task: tool({
-            description: '创建新的任务',
-            inputSchema: CreateTaskSchema  // AI SDK 5.0 使用 inputSchema
-          }),
-          update_task: tool({
-            description: '更新已存在的任务',
-            inputSchema: UpdateTaskSchema
-          })
-        }
-      : undefined
+    const tools = enableEdit ? taskTools : undefined
 
     console.log('[DEBUG] Initializing streamText...')
     console.log('[DEBUG] API Key available:', !!process.env.GEMINI_API_KEY || !!process.env.GOOGLE_GENERATIVE_AI_API_KEY)
@@ -360,7 +458,7 @@ export async function POST(request: NextRequest) {
       result = streamText({
         model: google('gemini-2.0-flash-exp'),  // 换成 Gemini 2.0 Flash
         messages,
-        temperature: 0.1,  // 降低温度确保格式稳定
+        temperature: 0.35,  // 略微提升随机性，让语气更自然
         maxOutputTokens: 2048,  // AI SDK 5.0 使用 maxOutputTokens
         tools,
         toolChoice: enableEdit ? 'auto' : 'none'
