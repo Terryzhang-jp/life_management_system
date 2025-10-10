@@ -83,12 +83,26 @@ class ExpensesDbManager {
       CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);
     `)
 
-    const hasDefaultCategory = db.prepare('SELECT COUNT(*) as count FROM expense_categories').get() as { count: number }
-    if (hasDefaultCategory.count === 0) {
-      db.prepare(`
-        INSERT INTO expense_categories (name, color_hex)
-        VALUES (?, ?)
-      `).run('未分类', '#6b7280')
+    // 预设分类数据
+    const presetCategories = [
+      { name: '饮食', colorHex: '#f97316' },    // 橙色
+      { name: '交通', colorHex: '#3b82f6' },    // 蓝色
+      { name: '生活', colorHex: '#10b981' },    // 绿色
+      { name: '教育', colorHex: '#8b5cf6' },    // 紫色
+      { name: '医疗', colorHex: '#ec4899' },    // 粉色
+      { name: '娱乐', colorHex: '#f59e0b' },    // 琥珀色
+      { name: '购物', colorHex: '#06b6d4' },    // 青色
+      { name: '未分类', colorHex: '#6b7280' }  // 灰色
+    ]
+
+    // 初始化预设分类（只插入不存在的）
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO expense_categories (name, color_hex)
+      VALUES (?, ?)
+    `)
+
+    for (const category of presetCategories) {
+      insertStmt.run(category.name, category.colorHex)
     }
 
     try {

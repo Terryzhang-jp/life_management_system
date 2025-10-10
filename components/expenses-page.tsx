@@ -11,7 +11,9 @@ import {
   Tag,
   Trash2,
   Palette,
-  X
+  X,
+  Scan,
+  BarChart3
 } from "lucide-react"
 import Link from "next/link"
 
@@ -24,6 +26,9 @@ import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
+import SmartReceiptUpload from "@/components/smart-receipt-upload"
+import ExpenseAnalytics from "@/components/expense-analytics"
+import exchangeRateService from "@/lib/exchange-rate-service"
 
 interface ExpenseCategory {
   id: number
@@ -103,6 +108,13 @@ export default function ExpensesPage() {
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "all">("all")
+  const [view, setView] = useState<'list' | 'analytics'>('list')
+  const [showSmartUpload, setShowSmartUpload] = useState(false)
+
+  // 货币筛选和换算状态
+  const [currencyFilter, setCurrencyFilter] = useState<string>('all')
+  const [targetCurrency, setTargetCurrency] = useState<string>('none')
+  const [exchangeRates, setExchangeRates] = useState<Map<string, number>>(new Map())
 
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [newExpenseTitle, setNewExpenseTitle] = useState("")
@@ -160,15 +172,100 @@ const toInputTime = (value: string) => {
   const categoryBusy = categorySubmitting || categorySavingId !== null || categoryDeletingId !== null
   const [updateSubmitting, setUpdateSubmitting] = useState(false)
 
+  // 带货币筛选的开销列表
   const filteredExpenses = useMemo(() => {
-    if (selectedCategoryId === "all") return expenses
-    return expenses.filter((expense) => expense.categoryId === selectedCategoryId)
-  }, [expenses, selectedCategoryId])
+    let result = expenses
 
+    // 按属性筛选
+    if (selectedCategoryId !== "all") {
+      result = result.filter((expense) => expense.categoryId === selectedCategoryId)
+    }
+
+    // 按货币筛选
+    if (currencyFilter !== "all") {
+      result = result.filter((expense) => expense.currency === currencyFilter)
+    }
+
+    return result
+  }, [expenses, selectedCategoryId, currencyFilter])
+
+  // 当需要换算时，获取汇率
+  useEffect(() => {
+    if (targetCurrency === 'none' || filteredExpenses.length === 0) {
+      setExchangeRates(new Map())
+      return
+    }
+
+    const fetchRates = async () => {
+      try {
+        // 收集需要换算的货币对
+        const uniqueCurrencies = Array.from(new Set(filteredExpenses.map(e => e.currency)))
+        const pairs = uniqueCurrencies
+          .filter(from => from !== targetCurrency)
+          .map(from => ({ from, to: targetCurrency }))
+
+        if (pairs.length === 0) {
+          setExchangeRates(new Map())
+          return
+        }
+
+        // 通过API批量获取汇率
+        const ratesMap = new Map<string, number>()
+        await Promise.all(
+          pairs.map(async ({ from, to }) => {
+            try {
+              const response = await fetch(`/api/exchange-rates?from=${from}&to=${to}`)
+              if (response.ok) {
+                const data = await response.json()
+                ratesMap.set(`${from}_${to}`, data.rate)
+              } else {
+                console.error(`获取 ${from} → ${to} 汇率失败`)
+                ratesMap.set(`${from}_${to}`, 1)
+              }
+            } catch (error) {
+              console.error(`获取 ${from} → ${to} 汇率出错:`, error)
+              ratesMap.set(`${from}_${to}`, 1)
+            }
+          })
+        )
+        setExchangeRates(ratesMap)
+      } catch (error) {
+        console.error('获取汇率失败:', error)
+        toast({
+          title: "汇率获取失败",
+          description: "无法获取最新汇率，请稍后重试",
+          variant: "destructive"
+        })
+      }
+    }
+
+    void fetchRates()
+  }, [targetCurrency, filteredExpenses, toast])
+
+  // 计算总额显示
   const totalDisplay = useMemo(() => {
     if (filteredExpenses.length === 0) {
       return { text: formatCurrencyValue(0, "CNY"), multi: false }
     }
+
+    // 如果需要换算
+    if (targetCurrency !== 'none') {
+      let total = 0
+      filteredExpenses.forEach((expense) => {
+        if (expense.currency === targetCurrency) {
+          // 相同货币直接累加
+          total += expense.amount
+        } else {
+          // 不同货币需要换算
+          const rateKey = `${expense.currency}_${targetCurrency}`
+          const rate = exchangeRates.get(rateKey) || 1
+          total += expense.amount * rate
+        }
+      })
+      return { text: formatCurrencyValue(total, targetCurrency), multi: false, converted: true }
+    }
+
+    // 不换算时的默认逻辑
     const uniqueCurrencies = Array.from(new Set(filteredExpenses.map((expense) => expense.currency)))
     if (uniqueCurrencies.length === 1) {
       const currency = uniqueCurrencies[0]
@@ -176,7 +273,7 @@ const toInputTime = (value: string) => {
       return { text: formatCurrencyValue(total, currency), multi: false }
     }
     return { text: "多币种记录，合计仅供参考", multi: true }
-  }, [filteredExpenses])
+  }, [filteredExpenses, targetCurrency, exchangeRates])
 
   useEffect(() => {
     if (!showCategoryManager) return
@@ -578,14 +675,32 @@ const toInputTime = (value: string) => {
             </h1>
             <p className="text-gray-600 mt-1">记录每一次投入，理解资源流向</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Link href="/past">
               <Button variant="outline" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" />返回过去主页
               </Button>
             </Link>
+            <Button
+              variant={view === 'list' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setView('list')}
+            >
+              列表视图
+            </Button>
+            <Button
+              variant={view === 'analytics' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setView('analytics')}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              分析视图
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
               <Palette className="h-4 w-4 mr-2" />管理属性
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowSmartUpload(true)}>
+              <Scan className="h-4 w-4 mr-2" />智能票据录入
             </Button>
             <Button size="sm" onClick={() => setShowAddExpense(true)}>
               <Plus className="h-4 w-4 mr-2" />记录开销
@@ -593,50 +708,105 @@ const toInputTime = (value: string) => {
           </div>
         </div>
 
-        <Card>
-          <CardContent className="py-4 flex flex-wrap gap-4 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="category-filter" className="text-sm text-gray-600">
-                属性筛选
-              </Label>
-              <select
-                id="category-filter"
-                value={selectedCategoryId}
-                onChange={(event) => {
-                  const value = event.target.value
-                  if (value === "all") {
-                    setSelectedCategoryId("all")
-                  } else {
-                    setSelectedCategoryId(Number(value))
-                  }
-                }}
-                className="px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="all">全部</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">
-                共 {filteredExpenses.length} 条记录，合计
-                <span className="text-base font-semibold text-gray-900 ml-1">
-                  {totalDisplay.text}
-                </span>
-              </div>
-              {totalDisplay.multi && (
-                <p className="text-xs text-gray-400 mt-1">
-                  包含不同币种的记录，建议按货币筛选查看具体合计。
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {view === 'list' && (
+          <Card>
+            <CardContent className="py-4 flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="category-filter" className="text-sm text-gray-600">
+                    属性筛选
+                  </Label>
+                  <select
+                    id="category-filter"
+                    value={selectedCategoryId}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (value === "all") {
+                        setSelectedCategoryId("all")
+                      } else {
+                        setSelectedCategoryId(Number(value))
+                      }
+                    }}
+                    className="px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="all">全部</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-        {loading ? (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="currency-filter" className="text-sm text-gray-600">
+                    货币筛选
+                  </Label>
+                  <select
+                    id="currency-filter"
+                    value={currencyFilter}
+                    onChange={(event) => setCurrencyFilter(event.target.value)}
+                    className="px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="all">全部货币</option>
+                    {currencyOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="target-currency" className="text-sm text-gray-600">
+                    换算货币
+                  </Label>
+                  <select
+                    id="target-currency"
+                    value={targetCurrency}
+                    onChange={(event) => setTargetCurrency(event.target.value)}
+                    className="px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="none">不换算</option>
+                    {currencyOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">
+                  共 {filteredExpenses.length} 条记录，合计
+                  <span className="text-base font-semibold text-gray-900 ml-1">
+                    {totalDisplay.text}
+                  </span>
+                </div>
+                {totalDisplay.multi && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    包含不同币种的记录，建议按货币筛选查看具体合计。
+                  </p>
+                )}
+                {targetCurrency !== 'none' && exchangeRates.size > 0 && (
+                  <div className="text-xs text-gray-500 mt-2">
+                    <p className="font-medium mb-1">当前汇率：</p>
+                    {Array.from(exchangeRates.entries()).map(([key, rate]) => {
+                      const [from, to] = key.split('_')
+                      return (
+                        <p key={key} className="text-gray-400">
+                          1 {from} = {rate.toFixed(4)} {to}
+                        </p>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {view === 'list' ? (loading ? (
           <Card>
             <CardContent className="py-16 text-center text-gray-400 flex flex-col items-center gap-3">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -655,6 +825,16 @@ const toInputTime = (value: string) => {
             <div className="space-y-4">
               {filteredExpenses.map((expense) => {
                 const category = expense.category
+
+                // 计算换算后的金额
+                let convertedAmount: string | null = null
+                if (targetCurrency !== 'none' && expense.currency !== targetCurrency) {
+                  const rateKey = `${expense.currency}_${targetCurrency}`
+                  const rate = exchangeRates.get(rateKey) || 1
+                  const converted = expense.amount * rate
+                  convertedAmount = formatCurrencyValue(converted, targetCurrency)
+                }
+
                 return (
                   <div key={expense.id} className="relative">
                     <div className="absolute -left-[17px] top-6 flex h-4 w-4 items-center justify-center rounded-full border border-emerald-200 bg-white">
@@ -667,8 +847,15 @@ const toInputTime = (value: string) => {
                             <Calendar className="h-4 w-4" />
                             <span>{formatDateTime(expense.occurredAt)}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                            {formatCurrencyValue(expense.amount, expense.currency)}
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {formatCurrencyValue(expense.amount, expense.currency)}
+                            </div>
+                            {convertedAmount && (
+                              <div className="text-sm text-gray-500">
+                                ≈ {convertedAmount}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <CardTitle className="text-xl text-gray-900 mt-2 flex items-center gap-3">
@@ -749,8 +936,30 @@ const toInputTime = (value: string) => {
               })}
             </div>
           </div>
+        )) : (
+          loading ? (
+            <Card>
+              <CardContent className="py-16 text-center text-gray-400 flex flex-col items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                正在加载数据...
+              </CardContent>
+            </Card>
+          ) : (
+            <ExpenseAnalytics expenses={expenses} categories={categories} />
+          )
         )}
       </div>
+
+      {showSmartUpload && (
+        <SmartReceiptUpload
+          categories={categories}
+          onComplete={() => {
+            setShowSmartUpload(false)
+            void loadExpenses()
+          }}
+          onCancel={() => setShowSmartUpload(false)}
+        />
+      )}
 
       {showAddExpense && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

@@ -63,6 +63,42 @@ export default function AnalogClock({ wakeUpHour = 7, sleepHour = 23 }: AnalogCl
     }
   }
 
+  // 计算周进度
+  const calculateWeekProgress = (currentTime: Date) => {
+    // 获取当前是周几 (0=周日, 1=周一, ..., 6=周六)
+    const dayOfWeek = currentTime.getDay()
+    // 转换为周一开始 (0=周一, 1=周二, ..., 6=周日)
+    const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+
+    // 当前时间在一天中的进度（0-1）
+    const hours = currentTime.getHours()
+    const minutes = currentTime.getMinutes()
+    const seconds = currentTime.getSeconds()
+    const dayProgress = (hours * 3600 + minutes * 60 + seconds) / 86400
+
+    // 周进度：已完成的天数 + 当前天的进度
+    const weekProgress = ((dayIndex + dayProgress) / 7) * 100
+
+    // 计算剩余时间
+    const totalSecondsInWeek = 7 * 24 * 3600
+    const elapsedSeconds = dayIndex * 24 * 3600 + hours * 3600 + minutes * 60 + seconds
+    const remainingSeconds = totalSecondsInWeek - elapsedSeconds
+    const remainingDays = Math.floor(remainingSeconds / 86400)
+    const remainingHours = Math.floor((remainingSeconds % 86400) / 3600)
+
+    // 获取周几的中文名称
+    const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    const currentDayName = weekDays[dayIndex]
+
+    return {
+      progress: weekProgress,
+      currentDay: dayIndex + 1, // 1-7
+      currentDayName,
+      remainingDays,
+      remainingHours
+    }
+  }
+
   const renderClock = () => {
     if (!time) return null
 
@@ -172,10 +208,11 @@ export default function AnalogClock({ wakeUpHour = 7, sleepHour = 23 }: AnalogCl
   }
 
   const dayProgress = time ? calculateDayProgress(time) : null
+  const weekProgress = time ? calculateWeekProgress(time) : null
 
   return (
-    <Card className="p-6">
-      <div className="flex flex-col items-center space-y-4">
+    <Card className="p-6 bg-gradient-to-br from-white to-gray-50">
+      <div className="flex flex-col items-center space-y-6">
         {/* 模拟时钟 */}
         <div className="relative">
           {mounted ? renderClock() : (
@@ -186,12 +223,12 @@ export default function AnalogClock({ wakeUpHour = 7, sleepHour = 23 }: AnalogCl
         </div>
 
         {/* 数字时间 */}
-        <div className="text-2xl font-light text-gray-700">
+        <div className="text-3xl font-extralight tracking-wider text-gray-800">
           {mounted && time ? time.toLocaleTimeString('zh-CN') : '--:--:--'}
         </div>
 
         {/* 日期 */}
-        <div className="text-sm text-gray-500">
+        <div className="text-xs text-gray-400 tracking-wide">
           {mounted && time ? time.toLocaleDateString('zh-CN', {
             year: 'numeric',
             month: 'long',
@@ -200,37 +237,58 @@ export default function AnalogClock({ wakeUpHour = 7, sleepHour = 23 }: AnalogCl
           }) : ''}
         </div>
 
-        {/* 有效时间进度条 */}
+        {/* 分隔线 */}
+        <div className="w-full border-t border-gray-100"></div>
+
+        {/* 今日进度 */}
         {mounted && dayProgress && (
-          <div className="w-full space-y-2">
-            <div className="flex justify-between text-xs text-gray-600">
-              <span>{wakeUpHour}:00 起床</span>
-              <span>{sleepHour}:00 睡觉</span>
+          <div className="w-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-500">TODAY</span>
+              {dayProgress.isActive ? (
+                <span className="text-xs font-mono text-blue-500">
+                  {dayProgress.remainingHours}h {dayProgress.remainingMinutes}m
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">💤 休息中</span>
+              )}
             </div>
 
-            <Progress
-              value={dayProgress.progress}
-              className="h-2"
-            />
+            <div className="relative">
+              <Progress
+                value={dayProgress.progress}
+                className="h-1.5 bg-gray-100"
+              />
+              <div className="flex justify-between mt-1.5 text-[10px] text-gray-400">
+                <span>{wakeUpHour}:00</span>
+                <span>{dayProgress.progress.toFixed(0)}%</span>
+                <span>{sleepHour}:00</span>
+              </div>
+            </div>
+          </div>
+        )}
 
-            <div className="text-center">
-              {dayProgress.isActive ? (
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-600">
-                    今日有效时间还剩
-                  </p>
-                  <p className="text-lg font-semibold text-blue-600">
-                    {dayProgress.remainingHours} 小时 {dayProgress.remainingMinutes} 分钟
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    已过 {dayProgress.progress.toFixed(1)}% / 共 {dayProgress.totalHours} 小时
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  休息时间 💤
-                </p>
-              )}
+        {/* 本周进度 */}
+        {mounted && weekProgress && (
+          <div className="w-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-500">THIS WEEK</span>
+              <span className="text-xs font-mono text-purple-500">
+                {weekProgress.remainingDays}d {weekProgress.remainingHours}h
+              </span>
+            </div>
+
+            <div className="relative">
+              <Progress
+                value={weekProgress.progress}
+                className="h-1.5 bg-gray-100"
+              />
+              <div className="flex justify-between mt-1.5 text-[10px] text-gray-400">
+                <span>周一</span>
+                <span className="font-medium text-purple-500">{weekProgress.currentDayName}</span>
+                <span>{weekProgress.progress.toFixed(0)}%</span>
+                <span>周日</span>
+              </div>
             </div>
           </div>
         )}
