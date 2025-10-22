@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react'
 interface MonthStatus {
   [date: string]: {
     hasSchedule: boolean
-    hasReview: boolean
   }
 }
 
@@ -103,7 +102,7 @@ export default function MinimalCalendar() {
             const isEmpty = day === null
 
             // 获取这一天的状态
-            let dateStatus = { hasSchedule: false, hasReview: false }
+            let dateStatus = { hasSchedule: false }
             if (day) {
               const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
               dateStatus = monthStatus[dateStr] || dateStatus
@@ -132,23 +131,13 @@ export default function MinimalCalendar() {
                       {day}
                     </span>
 
-                    {/* 红点和黄点 */}
-                    {(dateStatus.hasSchedule || dateStatus.hasReview) && (
+                    {/* 红点：有日程计划 */}
+                    {dateStatus.hasSchedule && (
                       <div className="flex gap-0.5 mt-0.5">
-                        {/* 红点：有日程计划 */}
-                        {dateStatus.hasSchedule && (
-                          <div
-                            className="w-1.5 h-1.5 rounded-full bg-red-500"
-                            title="有日程安排"
-                          />
-                        )}
-                        {/* 黄点：已完成回顾 */}
-                        {dateStatus.hasReview && (
-                          <div
-                            className="w-1.5 h-1.5 rounded-full bg-yellow-500"
-                            title="已完成回顾"
-                          />
-                        )}
+                        <div
+                          className="w-1.5 h-1.5 rounded-full bg-red-500"
+                          title="有日程安排"
+                        />
                       </div>
                     )}
                   </>

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getScheduledDatesInMonth } from '@/lib/schedule-db'
-import dailyReviewsManager from '@/lib/daily-reviews-db'
 
 export interface MonthStatus {
   [date: string]: {
     hasSchedule: boolean
-    hasReview: boolean
   }
 }
 
@@ -26,26 +24,15 @@ export async function GET(request: NextRequest) {
     // 查询日程数据
     const scheduledDates = getScheduledDatesInMonth(year, month)
 
-    // 查询回顾数据
-    const reviewedDates = await dailyReviewsManager.getCompletedDatesInMonth(year, month)
-
-    // 合并数据
+    // 构建月度状态
     const monthStatus: MonthStatus = {}
 
     // 添加日程日期
     scheduledDates.forEach(date => {
       if (!monthStatus[date]) {
-        monthStatus[date] = { hasSchedule: false, hasReview: false }
+        monthStatus[date] = { hasSchedule: false }
       }
       monthStatus[date].hasSchedule = true
-    })
-
-    // 添加回顾日期
-    reviewedDates.forEach(date => {
-      if (!monthStatus[date]) {
-        monthStatus[date] = { hasSchedule: false, hasReview: false }
-      }
-      monthStatus[date].hasReview = true
     })
 
     return NextResponse.json(monthStatus, { status: 200 })
