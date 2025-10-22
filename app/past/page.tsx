@@ -40,7 +40,7 @@ export default function PastPage() {
         {/* 内容区域 */}
         <div className="px-6">
           {/* 快捷入口 */}
-          <div className="mb-6 grid gap-4 md:grid-cols-3 max-w-4xl">
+          <div className="mb-6 grid gap-4 md:grid-cols-4 max-w-5xl">
             <Card>
               <CardContent className="p-4">
                 <h3 className="text-sm font-medium flex items-center mb-2">
@@ -76,6 +76,19 @@ export default function PastPage() {
                 <Link href="/past/expenses">
                   <Button variant="outline" size="sm" className="text-xs">
                     记录每一次投入
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="text-sm font-medium flex items-center mb-2">
+                  <Clock className="w-4 h-4 mr-2" />
+                  每日生活记录
+                </h3>
+                <Link href="/past/daily-logs">
+                  <Button variant="outline" size="sm" className="text-xs">
+                    回顾与补充记录
                   </Button>
                 </Link>
               </CardContent>

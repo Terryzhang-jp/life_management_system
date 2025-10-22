@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Clock, Rocket, Target, ListTodo } from "lucide-react"
+import { ArrowLeft, Clock, Rocket, Target, ListTodo, Flag } from "lucide-react"
 import Link from "next/link"
 import AspirationsCard from "@/components/aspirations-card"
 
@@ -42,18 +42,39 @@ export default function FuturePage() {
           <AspirationsCard />
 
           {/* 快捷入口 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Quests & Milestones入口 */}
+            <Card className="border-2 border-blue-200 bg-blue-50/30">
+              <CardHeader>
+                <h2 className="text-xl font-semibold flex items-center">
+                  <Flag className="w-5 h-5 mr-2 text-blue-600" />
+                  Quests & Milestones
+                </h2>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  证据驱动的人生目标系统，规划你的Journey
+                </p>
+                <Link href="/quests">
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    <Target className="w-4 h-4 mr-2" />
+                    进入Quest系统
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
             {/* 任务规划入口 */}
             <Card>
               <CardHeader>
                 <h2 className="text-xl font-semibold flex items-center">
                   <Target className="w-5 h-5 mr-2" />
-                  目标与规划
+                  任务管理
                 </h2>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 mb-4">
-                  管理你的长期目标和未来规划
+                  传统的层级任务管理系统
                 </p>
                 <Link href="/tasks">
                   <Button variant="outline">

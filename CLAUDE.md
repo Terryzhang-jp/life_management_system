@@ -10,6 +10,7 @@
 - **数据库**: Better-SQLite3 (本地存储)
 - **状态管理**: React Hooks
 - **图标**: Lucide React + Radix Icons
+- **语音识别**: Soniox WebSocket 实时语音转写 API
 
 ## 项目结构
 ```
@@ -31,7 +32,8 @@ frontend/
 │   │   │   ├── blocks/route.ts    # 日程块CRUD
 │   │   │   └── conflicts/route.ts # 时间冲突检测
 │   │   ├── export/       # 数据导出 API
-│   │   └── import/       # 数据导入 API
+│   │   ├── import/       # 数据导入 API
+│   │   └── soniox-temp-key/  # Soniox 临时 API Key 生成
 │   ├── past/             # 过去页面（回顾与复盘）
 │   │   ├── completed/page.tsx  # 已完成任务时间线
 │   │   ├── expenses/page.tsx   # 开销记录与票据管理
@@ -91,7 +93,14 @@ frontend/
 │   ├── memories-db.ts   # 记忆管理数据库操作
 │   ├── expenses-db.ts   # 开销与票据数据库操作
 │   ├── schedule-db.ts   # 日程安排数据库操作
-│   └── api.ts           # API 请求管理
+│   ├── api.ts           # API 请求管理
+│   ├── audio/           # 音频处理模块
+│   │   └── recorder.ts  # 音频录制器（MediaRecorder API封装）
+│   └── soniox/          # Soniox 语音识别模块
+│       ├── ws-client.ts        # WebSocket 客户端
+│       ├── ws-types.ts         # TypeScript 类型定义
+│       ├── useSonioxRecorderWS.ts  # React Hook
+│       └── README.md           # 模块文档
 ├── hooks/                # 自定义 React Hooks
 │   └── use-toast.ts     # Toast 通知 hook
 ├── data/                 # 数据库文件
@@ -290,7 +299,269 @@ interface Thought {
 - **编辑删除**: 支持对已记录的思考进行编辑或删除
 - **轻量设计**: 简约的界面不干扰主要工作流程
 
-### 6. 日程安排系统
+### 7. Soniox WebSocket 语音识别系统
+
+基于 Soniox 实时语音转写 API 的完整 WebSocket 实现，支持麦克风设备选择、实时转写和自动 fallback。
+
+#### 系统架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    React 组件层                          │
+│  VoiceRecorder / VoiceInput / 其他UI组件                │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│                 useSonioxRecorderWS                      │
+│           (React Hook - 状态管理层)                      │
+└────────┬──────────────────────────┬─────────────────────┘
+         │                          │
+         ↓                          ↓
+┌─────────────────────┐    ┌──────────────────────────────┐
+│  SonioxWSClient     │    │    AudioRecorder             │
+│  (WebSocket 客户端)  │    │    (音频采集)                 │
+└──────────┬──────────┘    └──────────┬───────────────────┘
+           │                          │
+           ↓                          ↓
+    wss://stt-rt.soniox.com      MediaRecorder API
+```
+
+#### 核心模块
+
+**1. AudioRecorder (lib/audio/recorder.ts)**
+- **职责**: 音频采集和设备管理
+- **功能**:
+  - 麦克风权限请求和设备选择
+  - Opus 编码格式优先
+  - 每 250ms 产生音频块
+  - 音频电平监控（开发模式）
+  - 支持指定设备录制
+
+**2. SonioxWSClient (lib/soniox/ws-client.ts)**
+- **职责**: WebSocket 连接和通信
+- **功能**:
+  - 建立 WebSocket 连接到 `wss://stt-rt.soniox.com/transcribe-websocket`
+  - 发送配置和音频数据
+  - 接收和解析转写结果
+  - 状态管理（IDLE/CONNECTING/STREAMING/FINALIZING/CLOSED/ERROR）
+  - 音频缓冲机制（连接前缓存音频数据）
+
+**3. useSonioxRecorderWS (lib/soniox/useSonioxRecorderWS.ts)**
+- **职责**: React Hook - 整合音频录制和语音识别
+- **功能**:
+  - 自动获取临时 API Key
+  - 整合 AudioRecorder 和 SonioxWSClient
+  - 状态管理（transcript / interimTranscript）
+  - Web Speech API fallback
+  - 设备选择和切换
+
+**4. VoiceRecorder (components/ui/voice-recorder.tsx)**
+- **职责**: 完整的 UI 组件
+- **功能**:
+  - 麦克风设备下拉选择器
+  - 录音控制按钮（开始/停止）
+  - 实时转写结果显示（final + interim）
+  - 手动 finalize 按钮
+  - 状态和错误提示
+
+#### 安全性设计：临时 API Key 机制
+
+**为什么需要临时 Key？**
+- 永久 API Key 不能暴露给前端
+- 临时 Key 有效期 5 分钟，安全性高
+- 只能用于指定用途（WebSocket 转写）
+
+**工作流程**:
+```
+前端 → POST /api/soniox-temp-key → 后端
+                                     ↓
+                            使用永久 Key 请求 Soniox
+                                     ↓
+                            返回临时 Key (5分钟有效)
+                                     ↓
+前端 ← 临时 Key ← 后端
+  ↓
+使用临时 Key 连接 WebSocket
+```
+
+**环境变量配置**:
+```env
+# .env.local (服务器端，不暴露给前端)
+SONIOX_API_KEY=your_permanent_api_key_here
+```
+
+#### 使用示例
+
+**快速集成（使用预封装组件）**:
+```typescript
+import VoiceRecorder from '@/components/ui/voice-recorder'
+
+export default function MyPage() {
+  return (
+    <VoiceRecorder
+      language="zh"
+      onTranscriptComplete={(text) => {
+        console.log('完成转写:', text)
+      }}
+    />
+  )
+}
+```
+
+**自定义实现（使用 Hook）**:
+```typescript
+import { useSonioxRecorderWS } from '@/lib/soniox/useSonioxRecorderWS'
+
+export default function CustomRecorder() {
+  const {
+    transcript,
+    interimTranscript,
+    isRecording,
+    startRecording,
+    stopRecording,
+    setMicrophoneDevice
+  } = useSonioxRecorderWS({ language: 'zh' })
+
+  return (
+    <div>
+      <button onClick={isRecording ? stopRecording : startRecording}>
+        {isRecording ? '停止' : '开始'}
+      </button>
+      <p>最终文本: {transcript}</p>
+      <p>临时文本: {interimTranscript}</p>
+    </div>
+  )
+}
+```
+
+#### 技术特性
+
+**实时转写**:
+- Final tokens: 累加到 transcript
+- Interim tokens: 替换 interimTranscript
+- 自动过滤 `<fin>` 标记和翻译内容
+
+**状态管理**:
+- `RecorderState`: idle / recording / processing / error
+- `WSState`: IDLE / CONNECTING / STREAMING / FINALIZING / CLOSED / ERROR
+- `RecognitionProvider`: soniox-ws / webspeech / none
+
+**错误处理与 Fallback**:
+- Soniox WebSocket 失败时自动切换到 Web Speech API
+- 完整的错误回调和状态通知
+- Toast 提示用户错误信息
+
+**设备管理**:
+- 自动枚举可用麦克风设备
+- 支持运行时切换设备（需重新开始录音）
+- 记住用户选择的设备 ID
+
+**开发模式调试**:
+- 音频电平实时监控
+- WebSocket 消息日志
+- 音频块大小警告
+- 所有调试日志仅在开发模式显示
+
+#### API 端点
+
+**临时 Key 生成**:
+- `POST /api/soniox-temp-key` - 生成临时 API Key
+  - 返回: `{ apiKey: string, expiresAt: string }`
+  - 有效期: 5 分钟
+  - 用途: WebSocket 转写
+
+#### 类型定义
+
+完整的类型定义位于 `lib/soniox/ws-types.ts`:
+
+```typescript
+// 录音状态
+type RecorderState = 'idle' | 'recording' | 'processing' | 'error'
+
+// 识别引擎
+type RecognitionProvider = 'soniox-ws' | 'webspeech' | 'none'
+
+// WebSocket 状态
+enum WSState {
+  IDLE = 'idle',
+  CONNECTING = 'connecting',
+  STREAMING = 'streaming',
+  FINALIZING = 'finalizing',
+  CLOSED = 'closed',
+  ERROR = 'error'
+}
+
+// Soniox 配置
+interface SonioxConfig {
+  api_key: string
+  model: string  // 'stt-rt-preview'
+  audio_format?: string  // 'auto'
+  enable_language_identification?: boolean
+  language_hints?: string[]  // ['zh', 'en', 'ja']
+  enable_speaker_diarization?: boolean
+  translation?: {
+    type: 'one_way' | 'two_way'
+    target_language: string
+  }
+}
+
+// Token 结构
+interface SonioxToken {
+  text: string
+  is_final?: boolean
+  translation_status?: 'original' | 'translation'
+  language?: string
+  speaker?: number
+}
+```
+
+#### 调试技巧
+
+**常见问题排查**:
+
+1. **音频电平为 0**
+   - 检查系统麦克风权限
+   - 检查浏览器麦克风权限
+   - 尝试切换麦克风设备
+
+2. **WebSocket 连接失败**
+   - 检查 API Key 是否正确配置
+   - 检查网络连接
+   - 查看控制台错误信息
+
+3. **没有转写结果**
+   - 确认音频电平正常（> 5）
+   - 确认说话声音足够大
+   - 检查语言设置是否正确
+
+**开发模式日志**:
+开发模式下自动启用详细日志：
+- 🎙️ 音频设置信息
+- 🔊 音频电平监控
+- 收到转写结果通知
+- WebSocket 状态变化
+
+#### 实现亮点
+
+1. **模块化设计**: 音频采集、WebSocket 通信、状态管理完全解耦
+2. **临时 Key 安全**: 永久 Key 不暴露给前端，临时 Key 自动过期
+3. **自动 Fallback**: Soniox 失败时无缝切换到 Web Speech API
+4. **设备选择**: 支持多麦克风环境，用户可自由切换
+5. **实时反馈**: Final 和 Interim 文本分离显示，用户体验流畅
+6. **生产就绪**: 开发日志与生产代码分离，性能优化完善
+
+#### 相关文件位置
+
+- `lib/audio/recorder.ts` - 音频录制器
+- `lib/soniox/ws-client.ts` - WebSocket 客户端
+- `lib/soniox/ws-types.ts` - TypeScript 类型定义
+- `lib/soniox/useSonioxRecorderWS.ts` - React Hook
+- `lib/soniox/README.md` - 详细模块文档
+- `components/ui/voice-recorder.tsx` - UI 组件
+- `app/api/soniox-temp-key/route.ts` - 临时 Key API
+
+### 8. 日程安排系统
 
 #### 数据结构
 ```typescript
@@ -356,12 +627,13 @@ interface WeekSchedule {
 4. **三重数据管理**: 生活哲学 + 任务管理 + 思考记录
 5. **开销与票据记录**: `/past/expenses` 管理金额、货币、票据图片
 6. **完成时间线**: `/past/completed` 展示历史完成记录与感悟
-7. **本地存储**: 使用 localStorage 和 SQLite 双重存储
-8. **数据导入/导出**: 支持 JSON 格式的数据导入导出
-9. **API 架构**: RESTful API 设计，支持前后端分离
-10. **响应式设计**: 适配不同屏幕尺寸
-11. **流畅导航**: 时态页面间无缝切换 + 全局快捷入口
-12. **全局组件**: 思考记录按钮全局可用
+7. **语音识别系统**: Soniox WebSocket 实时语音转写 + 设备选择 + 自动 fallback
+8. **本地存储**: 使用 localStorage 和 SQLite 双重存储
+9. **数据导入/导出**: 支持 JSON 格式的数据导入导出
+10. **API 架构**: RESTful API 设计，支持前后端分离
+11. **响应式设计**: 适配不同屏幕尺寸
+12. **流畅导航**: 时态页面间无缝切换 + 全局快捷入口
+13. **全局组件**: 思考记录按钮全局可用
 
 ## API 路由
 
@@ -433,6 +705,13 @@ interface WeekSchedule {
 - `GET /api/tasks/schedulable` - 获取可调度任务
   - 返回子子任务和无子任务的子任务
   - 过滤已完成任务
+
+### Soniox 语音识别 API
+- `POST /api/soniox-temp-key` - 生成临时 API Key
+  - 使用服务器端永久 Key 请求 Soniox API
+  - 返回 5 分钟有效期的临时 Key
+  - 安全机制：永久 Key 不暴露给前端
+  - 返回格式: `{ apiKey: string, expiresAt: string }`
 
 ## 开发命令
 
@@ -962,7 +1241,7 @@ pending (待完成) → completed (已完成)
 - **双重交互**: 点击卡片查看详情，点击编辑按钮编辑
 - **模态窗口**: 全屏覆盖的详情和编辑界面
 
-## 已完成功能总结 (2025-09-20)
+## 已完成功能总结
 ✅ **三时态页面系统** - 过去-现在-未来的完整生命管理架构
 ✅ **时间管理中心** - 模拟时钟 + 有效时间追踪 + 作息管理
 ✅ **完整的层级任务管理系统**
@@ -977,6 +1256,7 @@ pending (待完成) → completed (已完成)
 ✅ **每日三大决策系统** - 贝佐斯理念的决策管理功能
 ✅ **记忆相册系统** - 小红书风格瀑布流 + 完整照片管理功能
 ✅ **日程安排系统** - Google Calendar风格 + 拖拽调度 + 24小时时间轴
+✅ **Soniox WebSocket 语音识别系统** - 实时转写 + 设备选择 + 临时Key安全机制
 
 ## 最新更新 - 日程安排系统 (2025-09-23)
 
@@ -1010,6 +1290,60 @@ pending (待完成) → completed (已完成)
 - **平滑动画**: 300ms过渡效果，高度变化流畅自然
 - **智能预填**: 拖拽到具体时间槽自动预填开始和结束时间
 - **错误处理**: 完整的toast提示，清晰的错误信息
+
+## 最新更新 - Soniox WebSocket 语音识别系统 (2025-01-10)
+
+### 完整实时语音转写功能
+基于 Soniox WebSocket API 的生产级语音识别实现：
+
+#### 核心功能
+- ✅ **WebSocket 实时转写**: 直连 Soniox WebSocket API，低延迟实时转写
+- ✅ **临时 API Key 机制**: 服务器端生成临时 Key，永久 Key 不暴露给前端
+- ✅ **麦克风设备选择**: 支持多设备环境，用户可自由选择输入设备
+- ✅ **音频电平监控**: 开发模式下实时显示音频电平，便于调试
+- ✅ **自动 Fallback**: Soniox 失败时无缝切换到 Web Speech API
+- ✅ **实时文本分离**: Final 和 Interim 文本分别显示，用户体验流畅
+
+#### 技术架构
+- **模块化设计**: AudioRecorder（音频采集）、SonioxWSClient（WebSocket）、useSonioxRecorderWS（Hook）完全解耦
+- **状态管理**: 完整的状态机管理（IDLE/CONNECTING/STREAMING/FINALIZING/CLOSED/ERROR）
+- **音频缓冲**: WebSocket 连接建立前自动缓存音频数据
+- **错误处理**: 多层错误处理和回调机制
+- **TypeScript**: 完整的类型定义，类型安全
+
+#### 安全设计
+- **永久 Key 保护**: 永久 API Key 存储在 `.env.local`，仅服务器端访问
+- **临时 Key 系统**: 前端使用 5 分钟有效期的临时 Key
+- **最小权限原则**: 临时 Key 仅限 WebSocket 转写用途
+
+#### 实现亮点
+- **音频编码**: 优先使用 Opus 编码，自动 fallback 到其他支持格式
+- **250ms 音频块**: 每 250ms 产生一个音频块，平衡延迟和质量
+- **开发模式日志**: 所有调试日志仅在开发模式显示，生产环境干净
+- **设备记忆**: 记住用户选择的麦克风设备
+- **中文优化**: 完整支持中文语音识别
+
+#### 代码组织
+- `lib/audio/recorder.ts` - 音频录制器（147 行）
+- `lib/soniox/ws-client.ts` - WebSocket 客户端（210 行）
+- `lib/soniox/ws-types.ts` - TypeScript 类型定义（100+ 行）
+- `lib/soniox/useSonioxRecorderWS.ts` - React Hook（336 行）
+- `lib/soniox/README.md` - 完整文档（424 行）
+- `components/ui/voice-recorder.tsx` - UI 组件（245 行）
+- `app/api/soniox-temp-key/route.ts` - 临时 Key API（42 行）
+
+#### 用户体验
+- **零配置**: UI 组件开箱即用，自动获取临时 Key
+- **设备选择**: 下拉菜单选择麦克风，录音中禁止切换
+- **实时反馈**: 最终文本黑色、临时文本灰色斜体，清晰区分
+- **手动完成**: 提供"完成当前句子"按钮，立即完成识别
+- **使用提示**: 内置使用说明，降低学习成本
+
+#### 已解决的关键问题
+1. **音频电平为 0**: 通过添加设备选择器解决默认设备问题
+2. **中文输入法兼容**: 使用函数式状态更新确保兼容性
+3. **调试日志过多**: 所有日志包装在 `process.env.NODE_ENV === 'development'` 检查中
+4. **API Key 安全**: 实现临时 Key 机制，永久 Key 不暴露
 
 ## 后续优化建议
 

@@ -15,6 +15,7 @@ import { TodayTimeline } from "@/components/schedule/today-timeline"
 import { PastIncompleteList } from "@/components/schedule/past-incomplete-list"
 import { TodayScheduleSummary } from "@/components/present/today-schedule-summary"
 import DailyReviewButton from "@/components/daily-review/daily-review-button"
+import DailyLogButton from "@/components/daily-life-log/daily-log-button"
 import MinimalCalendar from "@/components/minimal-calendar"
 import DailyReviewQuick from "@/components/daily-review-quick"
 
@@ -415,7 +416,10 @@ export default function PresentPage() {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">现在 · Present</h1>
             <p className="text-gray-600">专注当下，这是唯一真实的时刻</p>
           </div>
-          <DailyReviewButton />
+          <div className="flex gap-3">
+            <DailyReviewButton />
+            <DailyLogButton />
+          </div>
         </div>
 
         {/* 时态导航 */}
