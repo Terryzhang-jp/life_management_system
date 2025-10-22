@@ -41,3 +41,7 @@ next-env.d.ts
 # uploaded files
 /public/my-past/
 /uploads/
+
+# test files with potential secrets
+test-*.mjs
+test-*.js
