@@ -18,6 +18,7 @@ import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
 import { QuickTaskCreateModal } from '@/components/schedule/quick-task-create-modal'
 import ScheduleAssistantDrawer from '@/components/schedule/schedule-assistant-drawer'
+import AgentChatPanel from '@/components/agent/agent-chat-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Clock, Plus, Bot } from 'lucide-react'
@@ -701,6 +702,9 @@ export default function SchedulePage() {
           onNextStepChange={setAssistantNextStepRequired}
         />
       </div>
+
+      {/* Agent Chat Panel - Floating */}
+      <AgentChatPanel onScheduleUpdated={fetchWeekSchedule} />
     </DndContext>
   )
 }

@@ -679,7 +679,7 @@ export default function QuestDetailPage() {
                     onClick={() => updateMilestoneStatus(nextMilestone.id!, 'current')}
                     className="bg-gray-900 hover:bg-gray-800 text-white"
                   >
-                    Start "{nextMilestone.title}"
+                    Start &quot;{nextMilestone.title}&quot;
                   </Button>
                 )}
               </div>
