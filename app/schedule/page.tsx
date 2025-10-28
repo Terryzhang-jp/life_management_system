@@ -17,11 +17,10 @@ import { TimelineWeekView } from '@/components/schedule/timeline-week-view'
 import { DayView } from '@/components/schedule/day-view'
 import { TimeSettingModal } from '@/components/schedule/time-setting-modal'
 import { QuickTaskCreateModal } from '@/components/schedule/quick-task-create-modal'
-import ScheduleAssistantDrawer from '@/components/schedule/schedule-assistant-drawer'
 import AgentChatPanel from '@/components/agent/agent-chat-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Clock, Plus, Bot } from 'lucide-react'
+import { ArrowLeft, Clock, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { WeekSchedule, ScheduleBlock } from '@/lib/schedule-db'
@@ -70,8 +69,6 @@ export default function SchedulePage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | null>(null)
   const [quickTaskModalOpen, setQuickTaskModalOpen] = useState(false)
   const [taskPoolRefreshToken, setTaskPoolRefreshToken] = useState(0)
-  const [assistantDrawerOpen, setAssistantDrawerOpen] = useState(false)
-  const [assistantNextStepRequired, setAssistantNextStepRequired] = useState(false)
 
   useEffect(() => {
     if (dayViewOpen && selectedDate) {
@@ -358,10 +355,6 @@ export default function SchedulePage() {
     })
   }
 
-  const handleAssistantScheduleUpdated = useCallback(() => {
-    void fetchWeekSchedule()
-  }, [fetchWeekSchedule])
-
   const handleUpdateBlockStatus = async (blockId: number, status: ScheduleBlock['status']) => {
     try {
       const response = await fetch(`/api/schedule/blocks?id=${blockId}`, {
@@ -544,16 +537,6 @@ export default function SchedulePage() {
               </p>
             </div>
           </div>
-          <Button
-            onClick={() => setAssistantDrawerOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Bot className="w-4 h-4 mr-2" />
-            AI 助手
-            {assistantNextStepRequired && (
-              <span className="ml-2 h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
-            )}
-          </Button>
         </div>
 
         {/* Main Content */}
@@ -689,17 +672,6 @@ export default function SchedulePage() {
           onUpdateCategory={handleUpdateBlockCategory}
           onEditBlock={handleEditBlock}
           onDeleteBlock={handleDeleteBlock}
-        />
-
-        {/* Schedule AI Assistant Drawer */}
-        <ScheduleAssistantDrawer
-          isOpen={assistantDrawerOpen}
-          onClose={() => {
-            setAssistantDrawerOpen(false)
-            setAssistantNextStepRequired(false)
-          }}
-          onScheduleUpdated={handleAssistantScheduleUpdated}
-          onNextStepChange={setAssistantNextStepRequired}
         />
       </div>
 

@@ -7,6 +7,8 @@
 import { getCalculationTools } from './calculation'
 import { getSystemTools } from './system'
 import { getScheduleTools } from './schedule'
+import { getExpenseTools } from './expense'
+import { getVisionTools } from './vision'
 import type { DynamicStructuredTool } from '@langchain/core/tools'
 import type { ToolMetadata } from '../types'
 import { ToolCategories } from '../categories'
@@ -58,10 +60,34 @@ export function getAllBuiltInTools(): Array<{
     })
   }
 
+  // 开销工具
+  const expenseTools = getExpenseTools()
+  for (const { tool, metadata } of expenseTools) {
+    tools.push({
+      tool,
+      metadata: {
+        ...metadata,
+        category: ToolCategories.EXPENSE,
+      },
+    })
+  }
+
+  // Vision 工具
+  const visionTools = getVisionTools()
+  for (const { tool, metadata } of visionTools) {
+    tools.push({
+      tool,
+      metadata: {
+        ...metadata,
+        category: ToolCategories.VISION,
+      },
+    })
+  }
+
   return tools
 }
 
 /**
  * 按分类导出工具
  */
-export { getCalculationTools, getSystemTools, getScheduleTools }
+export { getCalculationTools, getSystemTools, getScheduleTools, getExpenseTools, getVisionTools }

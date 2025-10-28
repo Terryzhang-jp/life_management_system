@@ -8,7 +8,6 @@ import Link from 'next/link'
 import SimpleTaskTree from '../whiteboard/simple-task-tree'
 import NoteEditor from './note-editor'
 import NoteTabs from './note-tabs'
-import ChatInterface from '../workspace/chat-interface'
 import { Note } from '@/lib/notes-db'
 
 export default function NotesWorkspace() {
@@ -185,7 +184,7 @@ export default function NotesWorkspace() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">📝 思维整理工作台</h1>
-              <p className="text-sm text-gray-600">左侧查看任务，中间记录想法，右侧AI助手</p>
+              <p className="text-sm text-gray-600">左侧查看任务，右侧记录想法</p>
             </div>
           </div>
         </div>
@@ -201,15 +200,15 @@ export default function NotesWorkspace() {
         />
       </div>
 
-      {/* 主工作区 - 三栏布局 */}
+      {/* 主工作区 - 双栏布局 */}
       <div className="flex h-[calc(100vh-140px)] w-full">
         {/* 左侧：任务树面板 */}
-        <div className="w-1/4 min-w-0 flex-shrink-0 border-r bg-white overflow-y-auto">
+        <div className="w-1/3 min-w-0 flex-shrink-0 border-r bg-white overflow-y-auto">
           <SimpleTaskTree />
         </div>
 
-        {/* 中间：文本编辑器 */}
-        <div className="w-5/12 min-w-0 flex-shrink-0 border-r bg-white overflow-y-auto">
+        {/* 右侧：文本编辑器 */}
+        <div className="flex-1 min-w-0 bg-white overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-gray-500">加载中...</div>
@@ -228,11 +227,6 @@ export default function NotesWorkspace() {
               onSave={handleNoteSaved}
             />
           )}
-        </div>
-
-        {/* 右侧：AI聊天助手 */}
-        <div className="flex-1 min-w-0 bg-gray-50 overflow-hidden">
-          <ChatInterface activeNote={activeNote} />
         </div>
       </div>
     </div>

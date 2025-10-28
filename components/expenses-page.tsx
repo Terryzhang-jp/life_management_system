@@ -29,6 +29,7 @@ import Image from "next/image"
 import SmartReceiptUpload from "@/components/smart-receipt-upload"
 import ExpenseAnalytics from "@/components/expense-analytics"
 import exchangeRateService from "@/lib/exchange-rate-service"
+import ExpenseAgentPanel from "@/components/expense/expense-agent-panel"
 
 interface ExpenseCategory {
   id: number
@@ -1411,6 +1412,9 @@ const toInputTime = (value: string) => {
           </div>
         </div>
       )}
+
+      {/* Expense Agent Panel */}
+      <ExpenseAgentPanel onExpenseUpdated={loadExpenses} />
     </div>
   )
 }

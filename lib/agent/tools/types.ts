@@ -17,6 +17,8 @@ export type ToolCategory =
   | 'tasks'        // 任务管理工具
   | 'memory'       // 记忆系统工具
   | 'quest'        // Quest 管理工具
+  | 'expense'      // 开销管理工具
+  | 'vision'       // 图像分析工具
 
 /**
  * 参数重要性级别

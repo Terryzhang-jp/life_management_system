@@ -17,6 +17,8 @@ export const ToolCategories = {
   TASKS: 'tasks' as ToolCategory,
   MEMORY: 'memory' as ToolCategory,
   QUEST: 'quest' as ToolCategory,
+  EXPENSE: 'expense' as ToolCategory,
+  VISION: 'vision' as ToolCategory,
 } as const
 
 /**
@@ -30,6 +32,8 @@ export const ToolCategoryDescriptions: Record<ToolCategory, string> = {
   tasks: '任务管理工具（查询、创建、更新任务）',
   memory: '记忆系统工具（存储和检索用户偏好）',
   quest: 'Quest 管理工具（Milestone 创建、进度跟踪）',
+  expense: '开销管理工具（记录、查询、统计开销）',
+  vision: '图像分析工具（OCR、票据识别等）',
 }
 
 /**
@@ -41,8 +45,10 @@ export const ToolCategoryPriority: Record<ToolCategory, number> = {
   calculation: 2,
   schedule: 3,
   tasks: 4,
-  quest: 5,
-  memory: 6,
+  expense: 5,
+  quest: 6,
+  vision: 7,
+  memory: 8,
 }
 
 /**

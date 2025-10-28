@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from '@ai-sdk/google'
-import { generateText } from 'ai'
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
+import { HumanMessage } from '@langchain/core/messages'
 
 interface ParsedReceiptData {
   date: string
@@ -131,39 +131,40 @@ async function callGeminiVisionAPI(
   prompt: string
 ): Promise<ParsedReceiptData | null> {
   try {
-    const model = google('gemini-2.0-flash-exp')
-
-    const response = await generateText({
-      model: model,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image',
-              image: imageBuffer,
-              mimeType: mimeType as any
-            }
-          ]
-        }
-      ],
-      temperature: 0.1
+    const model = new ChatGoogleGenerativeAI({
+      modelName: 'gemini-2.0-flash-exp',
+      temperature: 0.1,
+      apiKey: process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY
     })
 
-    if (!response.text) {
+    const imageBase64 = Buffer.from(imageBuffer).toString('base64')
+
+    const message = new HumanMessage({
+      content: [
+        { type: 'text', text: prompt },
+        {
+          type: 'image_url',
+          image_url: `data:${mimeType};base64,${imageBase64}`
+        }
+      ]
+    })
+
+    const response = await model.invoke([message])
+    const responseText = response.content as string
+
+    if (!responseText) {
       console.error('Gemini Vision 返回空响应')
       return null
     }
 
     console.log('=== Gemini Vision 原始响应 ===')
-    console.log(response.text)
+    console.log(responseText)
     console.log('==============================')
 
     // 解析JSON
-    const jsonText = extractJSON(response.text)
+    const jsonText = extractJSON(responseText)
     if (!jsonText) {
-      console.error('无法从响应中提取JSON:', response.text)
+      console.error('无法从响应中提取JSON:', responseText)
       return null
     }
 
