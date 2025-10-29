@@ -184,6 +184,11 @@ export const createExpenseTool = tool(
         const categories = expensesDbManager.getCategories()
         const found = categories.find(c => c.name === category)
         categoryId = found?.id || null
+
+        // 如果分类不存在，给出警告但继续创建（使用未分类）
+        if (!found && category !== '未分类') {
+          console.warn(`⚠️ 分类 "${category}" 不存在，将使用"未分类"`)
+        }
       }
 
       // 创建开销记录
@@ -211,13 +216,13 @@ export const createExpenseTool = tool(
   },
   {
     name: 'create_expense',
-    description: '创建一条开销记录，保存到数据库',
+    description: '创建一条开销记录，保存到数据库。【重要】必须指定 category 参数，根据开销内容推理出最合适的分类（如：咖啡→饮食，打车→交通，买书→教育）。如果不确定，使用"未分类"',
     schema: z.object({
       amount: z.number().describe('金额（数字）'),
       currency: z.string().describe('货币代码，如 CNY, USD, JPY'),
-      category: z.string().optional().describe('分类名称，如"饮食"、"交通"、"购物"'),
+      category: z.string().optional().describe('【强烈建议提供】分类名称，根据开销内容推理（如"饮食"、"交通"、"购物"、"教育"、"娱乐"、"医疗"、"生活"、"未分类"）。示例：咖啡→饮食，打车→交通，买书→教育，看电影→娱乐。如果完全无法判断，使用"未分类"'),
       date: z.string().describe('日期（YYYY-MM-DD）'),
-      description: z.string().optional().describe('描述或备注'),
+      description: z.string().optional().describe('【强烈建议提供】描述或备注。必须提取用户提供的所有上下文信息，如地点（"学校到家"）、商家（"大鹰之森"）、活动（"和朋友聚餐"）、商品（"泰国菜"）等。示例："学校到家的通勤费"、"大鹰之森 和yuxi 泰国菜"、"Starbucks买咖啡"'),
       receiptPath: z.string().optional().describe('票据图片路径（如果有）')
     })
   }

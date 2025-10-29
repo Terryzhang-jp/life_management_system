@@ -31,8 +31,8 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -50,32 +50,60 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
 
   // 处理图片选择
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setImageFile(file)
-      // 生成预览
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    // 限制最多5张图片
+    if (files.length > 5) {
+      toast({
+        title: '图片数量超限',
+        description: '最多只能上传5张图片',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setImageFiles(files)
+
+    // 生成预览
+    const previews: string[] = []
+    let loadedCount = 0
+
+    files.forEach((file) => {
       const reader = new FileReader()
       reader.onload = (e) => {
-        setImagePreview(e.target?.result as string)
+        previews.push(e.target?.result as string)
+        loadedCount++
+
+        // 当所有图片都加载完成时，更新状态
+        if (loadedCount === files.length) {
+          setImagePreviews([...previews])
+        }
       }
       reader.readAsDataURL(file)
-    }
+    })
   }
 
   // 清除图片
   const clearImage = () => {
-    setImageFile(null)
-    setImagePreview(null)
+    setImageFiles([])
+    setImagePreviews([])
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
+  // 删除单张图片
+  const removeImage = (index: number) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
+  }
+
   // 发送消息
   const handleSend = async () => {
-    if ((!input.trim() && !imageFile) || loading) return
+    if ((!input.trim() && imageFiles.length === 0) || loading) return
 
-    const userMessage = input.trim() || '请识别这张图片'
+    const userMessage = input.trim() || (imageFiles.length > 1 ? `请识别这${imageFiles.length}张图片` : '请识别这张图片')
     setInput('')
 
     // 展开聊天面板
@@ -88,7 +116,7 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
       role: 'user',
       content: userMessage,
       timestamp: new Date().toISOString(),
-      imagePreview: imagePreview || undefined,
+      imagePreview: imagePreviews.length > 0 ? imagePreviews[0] : undefined,
     }
     setMessages(prev => [...prev, newUserMessage])
     setLoading(true)
@@ -96,11 +124,16 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
     try {
       let response
 
-      if (imageFile) {
+      if (imageFiles.length > 0) {
         // 上传图片
         const formData = new FormData()
         formData.append('message', userMessage)
-        formData.append('image', imageFile)
+
+        // 添加多个图片文件
+        imageFiles.forEach((file, index) => {
+          formData.append(`image${index}`, file)
+        })
+        formData.append('imageCount', imageFiles.length.toString())
 
         response = await fetch('/api/expense-agent/chat', {
           method: 'POST',
@@ -190,19 +223,20 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple
               onChange={handleImageSelect}
               className="hidden"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-              title="上传票据图片"
+              title="上传票据图片（最多5张）"
             >
               <Camera className="w-5 h-5 text-gray-600" />
             </button>
             <button
               onClick={handleSend}
-              disabled={loading || (!input.trim() && !imageFile)}
+              disabled={loading || (!input.trim() && imageFiles.length === 0)}
               className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 transition-colors"
             >
               <ChevronUp className="w-5 h-5 text-gray-600" />
@@ -210,17 +244,23 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
           </div>
 
           {/* 图片预览（小输入框模式） */}
-          {imagePreview && (
+          {imagePreviews.length > 0 && (
             <div className="mt-2 flex justify-center">
-              <div className="bg-white rounded-lg shadow-md p-2 flex items-center gap-2">
-                <img src={imagePreview} alt="Preview" className="w-12 h-12 rounded object-cover" />
-                <span className="text-xs text-gray-600">{imageFile?.name}</span>
-                <button
-                  onClick={clearImage}
-                  className="p-1 hover:bg-gray-100 rounded transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-600" />
-                </button>
+              <div className="bg-white rounded-lg shadow-md p-2 flex items-center gap-2 max-w-md overflow-x-auto">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative flex-shrink-0">
+                    <img src={preview} alt={`Preview ${index + 1}`} className="w-12 h-12 rounded object-cover" />
+                    <button
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-1 -right-1 p-0.5 bg-red-500 hover:bg-red-600 rounded-full transition-colors"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                <span className="text-xs text-gray-600 whitespace-nowrap ml-2">
+                  {imageFiles.length} 张图片
+                </span>
               </div>
             </div>
           )}
@@ -313,19 +353,35 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
           {/* 底部输入框 */}
           <div className="px-6 py-4 border-t border-gray-200">
             {/* 图片预览 */}
-            {imagePreview && (
-              <div className="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                <img src={imagePreview} alt="Preview" className="w-16 h-16 rounded object-cover" />
-                <div className="flex-1 text-xs text-gray-600">
-                  <p className="font-medium">{imageFile?.name}</p>
-                  <p className="text-gray-400">{((imageFile?.size || 0) / 1024).toFixed(1)} KB</p>
+            {imagePreviews.length > 0 && (
+              <div className="mb-2 p-2 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-700">
+                    已选择 {imageFiles.length} 张图片
+                  </span>
+                  <button
+                    onClick={clearImage}
+                    className="text-xs text-red-500 hover:text-red-600"
+                  >
+                    清空全部
+                  </button>
                 </div>
-                <button
-                  onClick={clearImage}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-600" />
-                </button>
+                <div className="flex gap-2 overflow-x-auto">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={index} className="relative flex-shrink-0">
+                      <img src={preview} alt={`Preview ${index + 1}`} className="w-16 h-16 rounded object-cover" />
+                      <button
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-1 -right-1 p-0.5 bg-red-500 hover:bg-red-600 rounded-full transition-colors"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-[10px] text-center rounded-b">
+                        {index + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -336,13 +392,14 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleImageSelect}
                 className="hidden"
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                title="上传票据图片"
+                title="上传票据图片（最多5张）"
               >
                 <Camera className="w-4 h-4 text-gray-600" />
               </button>
@@ -358,7 +415,7 @@ export default function ExpenseAgentPanel({ onExpenseUpdated }: ExpenseAgentPane
 
               <button
                 onClick={handleSend}
-                disabled={loading || (!input.trim() && !imageFile)}
+                disabled={loading || (!input.trim() && imageFiles.length === 0)}
                 className="p-1.5 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
               >
                 <Send className="w-4 h-4 text-green-600" />

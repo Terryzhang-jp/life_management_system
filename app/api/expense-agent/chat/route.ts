@@ -13,27 +13,50 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get('content-type')
 
     let message = ''
-    let imageData: { base64: string; mimeType: string } | null = null
+    let imagesData: Array<{ base64: string; mimeType: string }> = []
 
     // 处理 multipart/form-data（图片上传）
     if (contentType?.includes('multipart/form-data')) {
       const formData = await request.formData()
-      message = (formData.get('message') as string) || '请识别这张图片'
-      const imageFile = formData.get('image') as File | null
+      message = (formData.get('message') as string) || '请识别这些图片'
+      const imageCount = parseInt(formData.get('imageCount') as string || '0')
 
-      if (imageFile) {
-        const buffer = await imageFile.arrayBuffer()
-        const base64 = Buffer.from(buffer).toString('base64')
-        imageData = {
-          base64,
-          mimeType: imageFile.type
+      // 处理多个图片文件
+      for (let i = 0; i < imageCount; i++) {
+        const imageFile = formData.get(`image${i}`) as File | null
+        if (imageFile) {
+          const buffer = await imageFile.arrayBuffer()
+          const base64 = Buffer.from(buffer).toString('base64')
+          imagesData.push({
+            base64,
+            mimeType: imageFile.type
+          })
+        }
+      }
+
+      // 向后兼容：检查是否有旧的单图片格式
+      if (imagesData.length === 0) {
+        const singleImage = formData.get('image') as File | null
+        if (singleImage) {
+          const buffer = await singleImage.arrayBuffer()
+          const base64 = Buffer.from(buffer).toString('base64')
+          imagesData.push({
+            base64,
+            mimeType: singleImage.type
+          })
         }
       }
     } else {
       // 处理 JSON（纯文本或预处理的图片数据）
       const body = await request.json()
       message = body.message
-      imageData = body.imageData || null
+
+      // 支持新的多图片格式和旧的单图片格式
+      if (body.imagesData && Array.isArray(body.imagesData)) {
+        imagesData = body.imagesData
+      } else if (body.imageData) {
+        imagesData = [body.imageData]
+      }
     }
 
     // 验证消息
@@ -44,14 +67,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 调用 Expense Agent（图片数据通过 imageData 参数传递，不要在消息中描述）
-    const result = await invokeExpenseAgent(message.trim(), 'expense-user-default', imageData)
+    // 调用 Expense Agent（图片数据通过 imagesData 参数传递，不要在消息中描述）
+    const result = await invokeExpenseAgent(message.trim(), 'expense-user-default', imagesData.length > 0 ? imagesData : undefined)
 
     // 返回响应
     return NextResponse.json({
       success: result.success,
       reply: result.reply,
-      hasImage: !!imageData
+      hasImages: imagesData.length > 0,
+      imageCount: imagesData.length
     })
   } catch (error: any) {
     console.error('[Expense Agent API] Error:', error)

@@ -113,18 +113,69 @@ const EXPENSE_SYSTEM_PROMPT = `你是一个专业的个人财务管理助手。�
 4. 累加得到总计
 5. 回复："📊 历史总开销约为 X CNY（已将所有 AUD 按当前汇率换算）"
 
+## 分类推理规则（重要！）
+**每次创建开销记录时，必须推理出一个合适的分类**
+
+### 推理步骤：
+1. **首次使用时**：调用 get_expense_categories 获取可用分类列表
+2. **分析开销内容**：根据用户描述或票据内容，推断最合适的分类
+3. **必须选择一个分类**：即使不确定，也要选择最接近的分类
+
+### 分类推理示例：
+- "咖啡" → 饮食
+- "打车"、"地铁" → 交通
+- "买书"、"课程" → 教育
+- "看电影"、"KTV" → 娱乐
+- "买衣服"、"日用品" → 购物
+- "房租"、"水电费" → 生活
+- "体检"、"买药" → 医疗
+- 无法判断 → 未分类
+
+### 常见分类映射：
+- **饮食**：早餐、午饭、晚饭、咖啡、奶茶、零食、餐厅
+- **交通**：打车、地铁、公交、油费、停车费
+- **购物**：衣服、鞋子、日用品、电子产品
+- **娱乐**：电影、游戏、KTV、旅游
+- **教育**：书籍、课程、培训、学费
+- **医疗**：体检、买药、看病
+- **生活**：房租、水电费、物业费、话费
+
+## 描述提取规则（重要！）
+**每次创建开销记录时，必须提取用户提供的上下文描述**
+
+### 提取原则：
+1. **优先提取用户的原始描述**：如"学校到家的通勤费"、"和朋友聚餐"、"大鹰之森 和yuxi 泰国菜"
+2. **不要丢失上下文信息**：即使分类已经明确，描述仍然重要（如"交通"分类 + "学校到家的通勤费"描述）
+3. **保持描述的完整性**：提取商家名称、地点、同行人员等所有相关信息
+
+### 提取示例：
+- "昨天学校到家的通勤费2000日元" → description: "学校到家的通勤费"
+- "晚餐在大鹰之森 和yuxi 泰国菜2900日元" → description: "大鹰之森 和yuxi 泰国菜"
+- "和朋友聚餐吃火锅200元" → description: "和朋友聚餐吃火锅"
+- "Starbucks买咖啡35元" → description: "Starbucks买咖啡"
+
 ## 工作流程
 
-### 场景1: 用户输入文本（如"今天午饭50元"）
-1. 从文本中提取：金额、货币、分类、日期
-2. 调用 create_expense 创建记录
-3. 向用户确认创建成功
+### 场景1: 用户输入文本（如"今天午饭50元"或"学校到家的通勤费2000日元"）
+1. **提取基础信息**：金额、货币、日期
+2. **提取用户描述**：用户提供的所有上下文信息（地点、商家、活动描述等）
+3. **推理分类**：根据描述词推断分类
+4. 调用 create_expense 创建记录（**必须包含 category 和 description 参数**）
+5. 向用户确认创建成功，并显示推理的分类和提取的描述
 
 ### 场景2: 用户上传票据图片
+**单张图片**：
 1. **直接分析图片**，识别票据中的信息：商家、金额、货币、日期、商品列表等
-2. 根据商品内容推断分类（如果不确定，可以调用 get_expense_categories 查看可用分类）
-3. 向用户展示识别结果，询问是否正确
+2. **必须推理分类**：根据商家名称和商品内容推断最合适的分类
+3. 向用户展示识别结果（包括推理的分类），询问是否正确
 4. 用户确认后调用 create_expense 创建记录
+
+**多张图片**：
+1. **逐张分析图片**，为每张图片识别票据信息：商家、金额、货币、日期、商品列表等
+2. **为每张票据推理分类**
+3. 为每张票据调用 create_expense 创建独立的开销记录（必须包含 category）
+4. 完成所有图片处理后，向用户汇报总结：创建了N条记录，总计金额等
+5. **重要**：必须循环处理所有图片，不要遗漏任何一张
 
 ### 场景3: 用户查询（如"这周花了多少钱？"）
 1. **必须先调用 getCurrentDate** 获取今天日期
@@ -137,6 +188,8 @@ const EXPENSE_SYSTEM_PROMPT = `你是一个专业的个人财务管理助手。�
 - 当看到图片时，直接分析图片内容，不要说"我无法看到图片"
 - **处理日期时，务必先调用 getCurrentDate，然后自己计算**
 - 开销金额必须是数字，日期格式必须是 YYYY-MM-DD
+- **分类是必须的**：每次创建开销记录时，必须推理并指定一个分类，不要留空
+- **描述是必须的**：必须提取用户提供的所有上下文描述（地点、商家、活动等），不要丢失任何信息
 - 创建记录前确认信息准确，如果信息不完整，向用户询问
 - 对于图片识别结果，询问用户是否需要修改后再创建记录
 
@@ -249,6 +302,16 @@ const ExpenseAgentState = Annotation.Root({
   reflectionRetryCount: Annotation<number>({
     default: () => 0,
   }),
+
+  // 存储多图片数据（用于在Agent节点访问）
+  imagesData: Annotation<Array<{ base64: string; mimeType: string }>>({
+    default: () => [],
+  }),
+
+  // 当前处理的图片索引
+  currentImageIndex: Annotation<number>({
+    default: () => 0,
+  }),
 })
 
 type ExpenseAgentStateType = typeof ExpenseAgentState.State
@@ -290,12 +353,17 @@ async function planningNode(
   }
 
   // 检查是否包含图片
-  const hasImage = Array.isArray(lastUserMessage.content) &&
+  const hasImages = Array.isArray(lastUserMessage.content) &&
     lastUserMessage.content.some((item: any) => item.type === 'image_url')
 
-  const planningPrompt = `你是一个开销管理规划助手。用户说: "${typeof lastUserMessage.content === 'string' ? lastUserMessage.content : '上传了图片'}"
+  // 计算图片数量
+  const imageCount = hasImages
+    ? lastUserMessage.content.filter((item: any) => item.type === 'image_url').length
+    : 0
 
-${hasImage ? '用户上传了图片（票据/收据），你可以直接看到图片内容。' : ''}
+  const planningPrompt = `你是一个开销管理规划助手。用户说: "${typeof lastUserMessage.content === 'string' ? lastUserMessage.content : `上传了${imageCount}张图片`}"
+
+${hasImages ? `用户上传了 ${imageCount} 张图片（票据/收据），你可以直接看到所有图片内容。` : ''}
 
 【重要原则】请制定一个可执行的工具调用计划。
 
@@ -303,7 +371,7 @@ ${hasImage ? '用户上传了图片（票据/收据），你可以直接看到�
 1. 分析用户意图：是文本解析、图片识别还是查询任务
 2. 每个步骤应该是具体的工具调用
 3. 对于图片，直接分析图片内容并提取信息，不需要调用工具解析图片
-4. 确保必填字段完整：amount（金额）、currency（货币）、date（日期）
+4. 确保必填字段完整：amount（金额）、currency（货币）、date（日期）、category（分类）、description（描述）
 
 ## 示例对比
 
@@ -322,29 +390,55 @@ ${hasImage ? '用户上传了图片（票据/收据），你可以直接看到�
 {
   "goal": "记录今天的午饭开销50元",
   "steps": [
-    {"description": "调用 create_expense 工具，amount=50, currency=CNY, categoryId=餐饮, date=today", "status": "pending"}
+    {"description": "调用 create_expense 工具，amount=50, currency=CNY, category=饮食, description=午饭, date=today", "status": "pending"}
+  ]
+}
+
+❌ 错误计划（缺少描述）:
+用户: "昨天学校到家的通勤费2000日元"
+{
+  "goal": "记录昨天的通勤费",
+  "steps": [
+    {"description": "调用 create_expense 工具，amount=2000, currency=JPY, category=交通, date=昨天", "status": "pending"}
+  ]
+}
+
+✅ 正确计划（包含完整描述）:
+{
+  "goal": "记录昨天的通勤费",
+  "steps": [
+    {"description": "调用 create_expense 工具，amount=2000, currency=JPY, category=交通, description=学校到家的通勤费, date=昨天", "status": "pending"}
   ]
 }
 
 ## 场景特定规划
 
-### 文本输入（如"今天午饭50元"）
+### 文本输入（如"昨天学校到家的通勤费2000日元"）
 {
   "goal": "从文本中提取并创建开销记录",
   "steps": [
-    {"description": "调用 create_expense，从文本提取 amount/currency/category/date", "status": "pending"}
+    {"description": "调用 create_expense，从文本提取 amount/currency/category/description/date。注意提取完整的用户描述如学校到家的通勤费", "status": "pending"}
   ]
 }
 
 ### 图片上传（票据/收据）
-{
+${imageCount === 1 ? `{
   "goal": "识别票据并创建开销记录",
   "steps": [
     {"description": "直接分析图片，提取商家、金额、货币、日期、商品列表", "status": "pending"},
     {"description": "根据商品内容推断分类，向用户确认识别结果", "status": "pending"},
     {"description": "用户确认后调用 create_expense 创建记录", "status": "pending"}
   ]
-}
+}` : `{
+  "goal": "识别${imageCount}张票据并分别创建${imageCount}条开销记录",
+  "steps": [
+    {"description": "分析第1张图片，提取商家、金额、货币、日期等信息", "status": "pending"},
+    {"description": "调用 create_expense 创建第1条开销记录", "status": "pending"},
+    {"description": "分析第2张图片，提取商家、金额、货币、日期等信息", "status": "pending"},
+    {"description": "调用 create_expense 创建第2条开销记录", "status": "pending"},
+    ... (重复至第${imageCount}张图片)
+  ]
+}`}
 
 ### 查询请求（如"这周花了多少钱？"）
 {
@@ -927,36 +1021,42 @@ export interface ExpenseAgentResponse {
  *
  * @param userMessage 用户消息
  * @param threadId 会话 ID（默认为 'expense-default'）
- * @param imageData 图片数据（可选）
+ * @param imagesData 图片数据数组（可选，支持多张图片）
  */
 export async function invokeExpenseAgent(
   userMessage: string,
   threadId: string = 'expense-default',
-  imageData?: { base64: string; mimeType: string }
+  imagesData?: Array<{ base64: string; mimeType: string }>
 ): Promise<ExpenseAgentResponse> {
   try {
     if (EXPENSE_AGENT_CONFIG.debug) {
       console.log('\n' + '='.repeat(80))
       console.log(`👤 [Expense 用户输入] ${userMessage}`)
       console.log(`🧵 [Thread ID] ${threadId}`)
-      if (imageData) {
-        console.log(`📷 [图片] MIME: ${imageData.mimeType}, Size: ${imageData.base64.length} bytes`)
+      if (imagesData && imagesData.length > 0) {
+        console.log(`📷 [图片数量] ${imagesData.length} 张`)
+        imagesData.forEach((img, idx) => {
+          console.log(`   图片 ${idx + 1}: MIME: ${img.mimeType}, Size: ${img.base64.length} bytes`)
+        })
       }
       console.log('='.repeat(80))
     }
 
     // 创建用户消息（支持多模态）
+    // 如果有多张图片，将所有图片附加到第一条消息中
     let userMsg: HumanMessage
-    if (imageData) {
-      userMsg = new HumanMessage({
-        content: [
-          { type: 'text', text: userMessage },
-          {
-            type: 'image_url',
-            image_url: `data:${imageData.mimeType};base64,${imageData.base64}`
-          }
-        ]
+    if (imagesData && imagesData.length > 0) {
+      const content: any[] = [{ type: 'text', text: userMessage }]
+
+      // 添加所有图片到消息中
+      imagesData.forEach((imageData) => {
+        content.push({
+          type: 'image_url',
+          image_url: `data:${imageData.mimeType};base64,${imageData.base64}`
+        })
       })
+
+      userMsg = new HumanMessage({ content })
     } else {
       userMsg = new HumanMessage(userMessage)
     }
@@ -964,6 +1064,8 @@ export async function invokeExpenseAgent(
     const result = await expenseApp.invoke({
       messages: [userMsg],
       threadId,
+      imagesData: imagesData || [],
+      currentImageIndex: 0,
     })
 
     const lastAIMessage = result.messages
